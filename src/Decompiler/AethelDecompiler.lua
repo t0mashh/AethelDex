@@ -1,16 +1,17 @@
 --[[
     ================================================================================
-    AethelDex Universal Luau Decompiler Engine v2.0
-    The most comprehensive in-game script decompiler and lifter for Roblox.
-    Supports: Native decompile, Bytecode lifting, RSB1 decompression, Cloud APIs,
-    and Deep In-Memory Lua AST / Introspection.
+    AethelDex Universal Luau Decompiler Engine v2.2
+    Studio-Quality Lifting, In-Engine Decompilation, AST Beautifier, Line Numbers & Code Search
     ================================================================================
 --]]
 
 local scriptViewerWindow = nil
 local scriptViewerBox = nil
+local lineNumBox = nil
 local scriptViewerTitle = nil
 local currentScript = nil
+local rawDecompiledSource = ""
+local isBeautified = true
 
 -- [[ Environment Helper: Universal Global Lookup ]]
 local function getGlobal(name)
@@ -83,6 +84,69 @@ local function serializeValue(val, depth)
 	else
 		return string.format("<%s: %s>", t, tostring(val))
 	end
+end
+
+-- [[ Source Code Beautifier & Optimizer ]]
+function f.beautifyDecompiledSource(source, scriptInst)
+	if not source or type(source) ~= "string" or #source == 0 then
+		return source
+	end
+
+	local scriptName = scriptInst and scriptInst.Name or "Module"
+	local safeName = scriptName:gsub("[^%w_]", "")
+	if safeName == "" or string.match(safeName, "^%d") then
+		safeName = "Module"
+	end
+
+	-- 1. Remove empty else/elseif branches
+	source = source:gsub("elseif%s+[^%c\n]+%s+then%s*\n*%s*end", "")
+	source = source:gsub("else%s*\n*%s*end", "")
+
+	-- 2. Detect main returned table variable, e.g. "return u16" or "return v1"
+	local returnVar = source:match("return%s+([%w_]+)%s*$")
+	if returnVar and returnVar ~= safeName and string.match(returnVar, "^[uv]%d+$") then
+		source = source:gsub("local%s+" .. returnVar .. "%s*=%s*{}", "local " .. safeName .. " = {}")
+		source = source:gsub("([%s%(%[,])" .. returnVar .. "([%s%)%],.:])", function(pre, post)
+			return pre .. safeName .. post
+		end)
+		source = source:gsub("return%s+" .. returnVar .. "%s*$", "return " .. safeName)
+	end
+
+	-- 3. For-Loop Constant Folding
+	-- e.g. local v2 = 3 \n local v3 = 1 \n for i = 1, v2, v3 do
+	source = source:gsub("local%s+([%w_]+)%s*=%s*(%d+)%s*\n%s*local%s+([%w_]+)%s*=%s*(%d+)%s*\n%s*for%s+([%w_]+)%s*=%s*(%d+)%s*,%s*%1%s*,%s*%3%s+do", function(v1, num1, v2, num2, var, start)
+		if num2 == "1" then
+			return string.format("for %s = %s, %s do", var, start, num1)
+		else
+			return string.format("for %s = %s, %s, %s do", var, start, num1, num2)
+		end
+	end)
+
+	-- 4. Clean up multiple blank lines
+	source = source:gsub("\n%s*\n%s*\n+", "\n\n")
+
+	-- 5. Format Top Header
+	local linesCount = select(2, source:gsub("\n", "\n")) + 1
+	local sPath = scriptInst and scriptInst:GetFullName() or scriptName
+	local sClass = scriptInst and scriptInst.ClassName or "Script"
+	local header = "--[[\n"
+		.. "    ================================================================================\n"
+		.. "    AethelDex v2.2 Decompiler [Studio-Quality Lifting]\n"
+		.. "    Script: " .. sPath .. "\n"
+		.. "    Class: " .. sClass .. " | Lines: " .. tostring(linesCount) .. "\n"
+		.. "    ================================================================================\n"
+		.. "--]]\n\n"
+
+	-- Strip existing header if present
+	if string.sub(source, 1, 4) == "--[[" then
+		local endComment = string.find(source, "%-%-%]%]", 1, true)
+		if endComment then
+			source = string.sub(source, endComment + 4)
+			source = source:gsub("^%s+", "")
+		end
+	end
+
+	return header .. source
 end
 
 -- [[ Deep Function Decompiler ]]
@@ -221,18 +285,10 @@ end
 -- [[ Deep ModuleScript Decompilation ]]
 function f.deepDecompileModule(scriptInst, modData)
 	local lines = {}
-	table.insert(lines, "--[[")
-	table.insert(lines, "    ================================================================================")
-	table.insert(lines, "    AethelDex Full Module Decompiler v2.0")
-	table.insert(lines, "    Module: " .. (scriptInst and scriptInst:GetFullName() or "ModuleScript"))
-	table.insert(lines, "    Exported Type: " .. type(modData))
-	table.insert(lines, "    ================================================================================")
-	table.insert(lines, "--]]\n")
+	table.insert(lines, "local Module = {}\n")
 
+	-- First pass: data fields, configurations, tables
 	if type(modData) == "table" then
-		table.insert(lines, "local Module = {}\n")
-
-		-- First pass: data fields, configurations, tables
 		for k, v in pairs(modData) do
 			if type(v) ~= "function" then
 				local keyStr = tostring(k)
@@ -269,7 +325,8 @@ function f.deepDecompileModule(scriptInst, modData)
 		table.insert(lines, "return " .. serializeValue(modData, 1))
 	end
 
-	return table.concat(lines, "\n")
+	local rawOutput = table.concat(lines, "\n")
+	return f.beautifyDecompiledSource(rawOutput, scriptInst)
 end
 
 -- [[ Built-In Luau Bytecode Engine & Statement Lifter ]]
@@ -438,17 +495,7 @@ function f.disassembleLuauBytecode(bytecode, scriptInst)
 	
 	-- Build Disassembly Output
 	local lines = {}
-	table.insert(lines, "--[[")
-	table.insert(lines, "    ================================================================================")
-	table.insert(lines, "    AethelDex Universal Luau Decompiler v2.0 [Luau Bytecode Engine]")
-	table.insert(lines, "    Script: " .. (scriptInst and scriptInst:GetFullName() or "Unknown"))
-	table.insert(lines, "    Class: " .. (scriptInst and scriptInst.ClassName or "LuaSourceContainer"))
-	table.insert(lines, "    Bytecode: Luau v" .. version .. " | Protos: " .. protoCount .. " | Strings: " .. stringCount)
-	table.insert(lines, "    ================================================================================")
-	table.insert(lines, "--]]\n")
-	
 	if #services > 0 then
-		table.insert(lines, "-- [[ Referenced Services ]]")
 		local seen = {}
 		for _, s in ipairs(services) do
 			if not seen[s] and #s > 2 then
@@ -460,21 +507,12 @@ function f.disassembleLuauBytecode(bytecode, scriptInst)
 	end
 	
 	if #remotes > 0 then
-		table.insert(lines, "-- [[ Detected Remotes & Events ]]")
 		local seen = {}
 		for _, r in ipairs(remotes) do
 			if not seen[r] and #r > 1 then
 				seen[r] = true
 				table.insert(lines, '-- Remote / Event: "' .. r .. '"')
 			end
-		end
-		table.insert(lines, "")
-	end
-	
-	if #urls > 0 then
-		table.insert(lines, "-- [[ Detected URLs / Webhooks ]]")
-		for _, u in ipairs(urls) do
-			table.insert(lines, '-- URL: ' .. u)
 		end
 		table.insert(lines, "")
 	end
@@ -550,7 +588,8 @@ function f.disassembleLuauBytecode(bytecode, scriptInst)
 		table.insert(lines, "end\n")
 	end
 	
-	return table.concat(lines, "\n")
+	local rawSource = table.concat(lines, "\n")
+	return f.beautifyDecompiledSource(rawSource, scriptInst)
 end
 
 -- [[ Master Decompiler Pipeline ]]
@@ -572,14 +611,14 @@ function f.decompileScript(scriptInst)
 	if type(decompile) == "function" then
 		local ok, res = pcall(decompile, scriptInst)
 		if ok and type(res) == "string" and #res > 30 and not string.find(res, "failed to decompile", 1, true) then
-			return res
+			return f.beautifyDecompiledSource(res, scriptInst)
 		end
 	end
 
 	-- 2. Plain Source
 	local hasSource, rawSource = pcall(function() return scriptInst.Source end)
 	if hasSource and type(rawSource) == "string" and #rawSource > 0 then
-		return rawSource
+		return f.beautifyDecompiledSource(rawSource, scriptInst)
 	end
 
 	-- 3. Extract Bytecode from script instance
@@ -598,7 +637,7 @@ function f.decompileScript(scriptInst)
 			if type(decompile) == "function" then
 				local ok2, res2 = pcall(decompile, closure)
 				if ok2 and type(res2) == "string" and #res2 > 30 and not string.find(res2, "failed", 1, true) then
-					return res2
+					return f.beautifyDecompiledSource(res2, scriptInst)
 				end
 			end
 			local dump = getGlobal("dumpstring") or string.dump
@@ -625,7 +664,7 @@ function f.decompileScript(scriptInst)
 				})
 			end)
 			if ok and type(resp) == "table" and (resp.StatusCode == 200 or resp.Status == 200) and type(resp.Body) == "string" and #resp.Body > 30 then
-				return resp.Body
+				return f.beautifyDecompiledSource(resp.Body, scriptInst)
 			end
 		end
 
@@ -693,6 +732,7 @@ function f.saveScript(scriptInst)
 	end)
 end
 
+-- [[ Script Viewer with Line Numbers, Search & Beautifier ]]
 function f.viewScript(scriptInst)
 	if not scriptInst then return end
 	currentScript = scriptInst
@@ -700,9 +740,9 @@ function f.viewScript(scriptInst)
 	if not scriptViewerWindow then
 		scriptViewerWindow = Instance.new("Frame")
 		scriptViewerWindow.Name = "ScriptViewer"
-		scriptViewerWindow.Size = UDim2.new(0, 680, 0, 500)
-		scriptViewerWindow.Position = UDim2.new(0.5, -340, 0.5, -250)
-		scriptViewerWindow.BackgroundColor3 = Color3.fromRGB(36, 36, 36)
+		scriptViewerWindow.Size = UDim2.new(0, 720, 0, 520)
+		scriptViewerWindow.Position = UDim2.new(0.5, -360, 0.5, -260)
+		scriptViewerWindow.BackgroundColor3 = Color3.fromRGB(34, 34, 34)
 		scriptViewerWindow.BorderSizePixel = 1
 		scriptViewerWindow.BorderColor3 = Color3.fromRGB(60, 60, 60)
 		scriptViewerWindow.Active = true
@@ -712,18 +752,18 @@ function f.viewScript(scriptInst)
 
 		local topBar = Instance.new("Frame")
 		topBar.Name = "TopBar"
-		topBar.Size = UDim2.new(1, 0, 0, 28)
-		topBar.BackgroundColor3 = Color3.fromRGB(48, 48, 48)
+		topBar.Size = UDim2.new(1, 0, 0, 30)
+		topBar.BackgroundColor3 = Color3.fromRGB(44, 44, 44)
 		topBar.BorderSizePixel = 0
 		topBar.ZIndex = 51
 		topBar.Parent = scriptViewerWindow
 
 		scriptViewerTitle = Instance.new("TextLabel")
 		scriptViewerTitle.Name = "Title"
-		scriptViewerTitle.Size = UDim2.new(1, -180, 1, 0)
+		scriptViewerTitle.Size = UDim2.new(1, -380, 1, 0)
 		scriptViewerTitle.Position = UDim2.new(0, 10, 0, 0)
 		scriptViewerTitle.BackgroundTransparency = 1
-		scriptViewerTitle.TextColor3 = Color3.fromRGB(220, 220, 220)
+		scriptViewerTitle.TextColor3 = Color3.fromRGB(230, 230, 230)
 		scriptViewerTitle.TextSize = 13
 		scriptViewerTitle.Font = Enum.Font.SourceSansBold
 		scriptViewerTitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -732,9 +772,9 @@ function f.viewScript(scriptInst)
 
 		local closeBtn = Instance.new("TextButton")
 		closeBtn.Name = "Close"
-		closeBtn.Size = UDim2.new(0, 28, 0, 28)
-		closeBtn.Position = UDim2.new(1, -28, 0, 0)
-		closeBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+		closeBtn.Size = UDim2.new(0, 30, 0, 30)
+		closeBtn.Position = UDim2.new(1, -30, 0, 0)
+		closeBtn.BackgroundColor3 = Color3.fromRGB(190, 45, 45)
 		closeBtn.BorderSizePixel = 0
 		closeBtn.Text = "X"
 		closeBtn.TextColor3 = Color3.new(1, 1, 1)
@@ -746,11 +786,31 @@ function f.viewScript(scriptInst)
 			scriptViewerWindow.Visible = false
 		end)
 
+		local saveBtn = Instance.new("TextButton")
+		saveBtn.Name = "Save"
+		saveBtn.Size = UDim2.new(0, 60, 0, 22)
+		saveBtn.Position = UDim2.new(1, -95, 0, 4)
+		saveBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+		saveBtn.BorderSizePixel = 0
+		saveBtn.Text = "Save File"
+		saveBtn.TextColor3 = Color3.fromRGB(240, 240, 240)
+		saveBtn.TextSize = 12
+		saveBtn.Font = Enum.Font.SourceSans
+		saveBtn.ZIndex = 52
+		saveBtn.Parent = topBar
+		saveBtn.MouseButton1Click:Connect(function()
+			if currentScript then
+				f.saveScript(currentScript)
+				saveBtn.Text = "Saved!"
+				task.delay(1, function() saveBtn.Text = "Save File" end)
+			end
+		end)
+
 		local copyBtn = Instance.new("TextButton")
 		copyBtn.Name = "Copy"
-		copyBtn.Size = UDim2.new(0, 70, 0, 22)
-		copyBtn.Position = UDim2.new(1, -170, 0, 3)
-		copyBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+		copyBtn.Size = UDim2.new(0, 68, 0, 22)
+		copyBtn.Position = UDim2.new(1, -168, 0, 4)
+		copyBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
 		copyBtn.BorderSizePixel = 0
 		copyBtn.Text = "Copy Code"
 		copyBtn.TextColor3 = Color3.fromRGB(240, 240, 240)
@@ -771,43 +831,99 @@ function f.viewScript(scriptInst)
 			end
 		end)
 
-		local saveBtn = Instance.new("TextButton")
-		saveBtn.Name = "Save"
-		saveBtn.Size = UDim2.new(0, 60, 0, 22)
-		saveBtn.Position = UDim2.new(1, -95, 0, 3)
-		saveBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-		saveBtn.BorderSizePixel = 0
-		saveBtn.Text = "Save File"
-		saveBtn.TextColor3 = Color3.fromRGB(240, 240, 240)
-		saveBtn.TextSize = 12
-		saveBtn.Font = Enum.Font.SourceSans
-		saveBtn.ZIndex = 52
-		saveBtn.Parent = topBar
-		saveBtn.MouseButton1Click:Connect(function()
-			if currentScript then
-				f.saveScript(currentScript)
-				saveBtn.Text = "Saved!"
-				task.delay(1, function() saveBtn.Text = "Save File" end)
+		local beautifyBtn = Instance.new("TextButton")
+		beautifyBtn.Name = "Beautify"
+		beautifyBtn.Size = UDim2.new(0, 64, 0, 22)
+		beautifyBtn.Position = UDim2.new(1, -236, 0, 4)
+		beautifyBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+		beautifyBtn.BorderSizePixel = 0
+		beautifyBtn.Text = "Clean: ON"
+		beautifyBtn.TextColor3 = Color3.fromRGB(100, 220, 120)
+		beautifyBtn.TextSize = 11
+		beautifyBtn.Font = Enum.Font.SourceSansBold
+		beautifyBtn.ZIndex = 52
+		beautifyBtn.Parent = topBar
+		beautifyBtn.MouseButton1Click:Connect(function()
+			isBeautified = not isBeautified
+			if isBeautified then
+				beautifyBtn.Text = "Clean: ON"
+				beautifyBtn.TextColor3 = Color3.fromRGB(100, 220, 120)
+				local clean = f.beautifyDecompiledSource(rawDecompiledSource, currentScript)
+				scriptViewerBox.Text = clean
+			else
+				beautifyBtn.Text = "Clean: OFF"
+				beautifyBtn.TextColor3 = Color3.fromRGB(220, 100, 100)
+				scriptViewerBox.Text = rawDecompiledSource
+			end
+		end)
+
+		local searchBox = Instance.new("TextBox")
+		searchBox.Name = "Search"
+		searchBox.Size = UDim2.new(0, 120, 0, 22)
+		searchBox.Position = UDim2.new(1, -362, 0, 4)
+		searchBox.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+		searchBox.BorderSizePixel = 1
+		searchBox.BorderColor3 = Color3.fromRGB(60, 60, 60)
+		searchBox.PlaceholderText = "Search code..."
+		searchBox.PlaceholderColor3 = Color3.fromRGB(130, 130, 130)
+		searchBox.Text = ""
+		searchBox.TextColor3 = Color3.fromRGB(240, 240, 240)
+		searchBox.TextSize = 12
+		searchBox.Font = Enum.Font.SourceSans
+		searchBox.ClearTextOnFocus = false
+		searchBox.ZIndex = 52
+		searchBox.Parent = topBar
+		searchBox.FocusLost:Connect(function()
+			local query = searchBox.Text
+			if query and #query > 0 and scriptViewerBox then
+				local content = scriptViewerBox.Text
+				local sPos = string.find(string.lower(content), string.lower(query), 1, true)
+				if sPos then
+					local pre = string.sub(content, 1, sPos)
+					local lineNum = select(2, string.gsub(pre, "\n", "\n")) + 1
+					local scroll = scriptViewerBox.Parent
+					if scroll and scroll:IsA("ScrollingFrame") then
+						scroll.CanvasPosition = Vector2.new(0, math.max(0, (lineNum - 3) * 16))
+					end
+					scriptViewerTitle.Text = string.format("Found %q on line %d", query, lineNum)
+				else
+					scriptViewerTitle.Text = string.format("No matches for %q", query)
+				end
 			end
 		end)
 
 		local scroll = Instance.new("ScrollingFrame")
 		scroll.Name = "CodeScroll"
-		scroll.Size = UDim2.new(1, -8, 1, -36)
-		scroll.Position = UDim2.new(0, 4, 0, 32)
-		scroll.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+		scroll.Size = UDim2.new(1, -8, 1, -38)
+		scroll.Position = UDim2.new(0, 4, 0, 34)
+		scroll.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
 		scroll.BorderSizePixel = 0
 		scroll.ScrollBarThickness = 8
 		scroll.CanvasSize = UDim2.new(0, 0, 0, 1000)
 		scroll.ZIndex = 51
 		scroll.Parent = scriptViewerWindow
 
+		-- Line numbers column
+		lineNumBox = Instance.new("TextLabel")
+		lineNumBox.Name = "LineNumbers"
+		lineNumBox.Size = UDim2.new(0, 40, 1, 0)
+		lineNumBox.Position = UDim2.new(0, 2, 0, 0)
+		lineNumBox.BackgroundTransparency = 1
+		lineNumBox.TextColor3 = Color3.fromRGB(90, 90, 90)
+		lineNumBox.TextSize = 12
+		lineNumBox.Font = Enum.Font.Code
+		lineNumBox.TextXAlignment = Enum.TextXAlignment.Right
+		lineNumBox.TextYAlignment = Enum.TextYAlignment.Top
+		lineNumBox.ZIndex = 52
+		lineNumBox.Parent = scroll
+
+		-- Code Text
 		scriptViewerBox = Instance.new("TextBox")
 		scriptViewerBox.Name = "CodeText"
-		scriptViewerBox.Size = UDim2.new(1, -10, 1, 0)
-		scriptViewerBox.Position = UDim2.new(0, 5, 0, 0)
+		scriptViewerBox.Size = UDim2.new(1, -55, 1, 0)
+		scriptViewerBox.Position = UDim2.new(0, 48, 0, 0)
 		scriptViewerBox.BackgroundTransparency = 1
-		scriptViewerBox.TextColor3 = Color3.fromRGB(220, 220, 220)
+		scriptViewerBox.TextColor3 = Color3.fromRGB(225, 225, 225)
 		scriptViewerBox.TextSize = 13
 		scriptViewerBox.Font = Enum.Font.Code
 		scriptViewerBox.TextXAlignment = Enum.TextXAlignment.Left
@@ -820,16 +936,26 @@ function f.viewScript(scriptInst)
 	end
 
 	scriptViewerTitle.Text = "Viewing: " .. scriptInst.Name .. " [" .. scriptInst.ClassName .. "]"
-	scriptViewerBox.Text = "-- [AethelDex Decompiler]: Processing bytecode & lifting source code, please wait..."
+	scriptViewerBox.Text = "-- [AethelDex Decompiler]: Lifting source code & beautifying AST, please wait..."
+	if lineNumBox then lineNumBox.Text = "1" end
 	scriptViewerWindow.Visible = true
 
 	task.spawn(function()
 		local source = f.decompileScript(scriptInst)
-		scriptViewerBox.Text = source
-		local lines = select(2, string.gsub(source, "\n", "\n")) + 1
+		rawDecompiledSource = source
+		local displayedSource = isBeautified and f.beautifyDecompiledSource(source, scriptInst) or source
+		scriptViewerBox.Text = displayedSource
+		
+		local lineCount = select(2, string.gsub(displayedSource, "\n", "\n")) + 1
+		if lineNumBox then
+			local numTable = {}
+			for n = 1, math.min(lineCount, 3000) do table.insert(numTable, tostring(n)) end
+			lineNumBox.Text = table.concat(numTable, "\n")
+		end
+
 		local scroll = scriptViewerBox.Parent
 		if scroll and scroll:IsA("ScrollingFrame") then
-			scroll.CanvasSize = UDim2.new(0, 0, 0, lines * 16 + 40)
+			scroll.CanvasSize = UDim2.new(0, 0, 0, lineCount * 16 + 50)
 		end
 	end)
 end
