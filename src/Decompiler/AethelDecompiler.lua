@@ -105,27 +105,33 @@ function f.beautifyDecompiledSource(source, scriptInst)
 	-- 2. Detect main returned table variable, e.g. "return u16" or "return v1"
 	local returnVar = source:match("return%s+([%w_]+)%s*$")
 	if returnVar and returnVar ~= safeName and string.match(returnVar, "^[uv]%d+$") then
-		source = source:gsub("local%s+" .. returnVar .. "%s*=%s*{}", "local " .. safeName .. " = {}")
-		source = source:gsub("([%s%(%[,])" .. returnVar .. "([%s%)%],.:])", function(pre, post)
-			return pre .. safeName .. post
-		end)
-		source = source:gsub("return%s+" .. returnVar .. "%s*$", "return " .. safeName)
+		source = source:gsub("(%f[%w_])" .. returnVar .. "(%f[^%w_])", safeName)
 	end
 
-	-- 3. For-Loop Constant Folding
-	-- e.g. local v2 = 3 \n local v3 = 1 \n for i = 1, v2, v3 do
-	source = source:gsub("local%s+([%w_]+)%s*=%s*(%d+)%s*\n%s*local%s+([%w_]+)%s*=%s*(%d+)%s*\n%s*for%s+([%w_]+)%s*=%s*(%d+)%s*,%s*%1%s*,%s*%3%s+do", function(v1, num1, v2, num2, var, start)
-		if num2 == "1" then
-			return string.format("for %s = %s, %s do", var, start, num1)
+	-- 3. Simplify table initialization: local v1 = {}; MyServices.Services = v1 -> MyServices.Services = {}
+	source = source:gsub("local%s+([%w_]+)%s*=%s*{%}%s*\n%s*([%w_]+)%.([%w_]+)%s*=%s*%1", "%2.%3 = {}")
+
+	-- 4. For-Loop Constant Folding (with optional self alias in between)
+	source = source:gsub("local%s+([%w_]+)%s*=%s*(%d+)%s*\n%s*local%s+([%w_]+)%s*=%s*(%d+)%s*\n%s*(local%s+[%w_]+%s*=%s*self%s*\n%s*)?for%s+([%w_]+)%s*=%s*(%d+)%s*,%s*%1%s*,%s*%3%s+do", function(v1, n1, v2, n2, selfLine, var, start)
+		local extra = selfLine or ""
+		if n2 == "1" then
+			return extra .. string.format("for %s = %s, %s do", var, start, n1)
 		else
-			return string.format("for %s = %s, %s, %s do", var, start, num1, num2)
+			return extra .. string.format("for %s = %s, %s, %s do", var, start, n1, n2)
 		end
 	end)
 
-	-- 4. Clean up multiple blank lines
+	-- 5. Contextual method parameter renaming
+	source = source:gsub("function%s+([%w_]+):GetService%s*%(%s*p%d+%s*%)", "function %1:GetService(serviceName)")
+	source = source:gsub("function%s+([%w_]+)%.FetchAllServices%s*%(%s*p%d+%s*%)", "function %1.FetchAllServices(self)")
+
+	-- 6. Boolean Ternary simplification for RunService:IsServer()
+	source = source:gsub("if%s+not%s*%((RunService:IsServer%(%))%)%s*then%s*\n%s*([%w_]+)%s*=%s*\"Client\"%s*\n%s*else%s*\n%s*%2%s*=%s*\"Server\"%s*\n%s*end", "local %2 = RunService:IsServer() and \"Server\" or \"Client\"")
+
+	-- 7. Clean up multiple blank lines
 	source = source:gsub("\n%s*\n%s*\n+", "\n\n")
 
-	-- 5. Format Top Header
+	-- 8. Format Top Header
 	local linesCount = select(2, source:gsub("\n", "\n")) + 1
 	local sPath = scriptInst and scriptInst:GetFullName() or scriptName
 	local sClass = scriptInst and scriptInst.ClassName or "Script"
