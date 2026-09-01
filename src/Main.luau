@@ -74,7 +74,7 @@ function AethelDex.Init()
 	-- 5. Create Tab Views
 	local function createTabContainer(name: string): Frame
 		local frame = Instance.new("Frame")
-		frame.Name = `TabContent_{name}`
+		frame.Name = "TabContent_" .. name
 		frame.Size = UDim2.fromScale(1, 1)
 		frame.BackgroundTransparency = 1
 		frame.Visible = (name == "explorer")

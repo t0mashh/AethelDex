@@ -114,7 +114,7 @@ function CommandPalette:PopulateStandardCommands()
 
 	for i, cmd in ipairs(commands) do
 		local btn = Instance.new("TextButton")
-		btn.Name = `Cmd_{cmd.Id}`
+		btn.Name = "Cmd_" .. cmd.Id
 		btn.Size = UDim2.new(1, 0, 0, 30)
 		btn.BackgroundColor3 = Theme.BgElevated
 		btn.AutoButtonColor = false

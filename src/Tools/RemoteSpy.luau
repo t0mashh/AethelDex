@@ -158,7 +158,7 @@ function RemoteSpy:AddLog(remote: Instance, method: string, args: { any })
 
 	-- Render log item
 	local row = Instance.new("Frame")
-	row.Name = `Log_{entry.Id}`
+	row.Name = "Log_" .. tostring(entry.Id)
 	row.Size = UDim2.new(1, -8, 0, 28)
 	row.Position = UDim2.fromOffset(4, 0)
 	row.BackgroundColor3 = Theme.BgElevated
@@ -178,7 +178,7 @@ function RemoteSpy:AddLog(remote: Instance, method: string, args: { any })
 	titleLabel.Font = Enum.Font.SourceSans
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
-	titleLabel.Text = `[{entry.Time}] {remote.Name} ({#args} args)`
+	titleLabel.Text = "[" .. entry.Time .. "] " .. remote.Name .. " (" .. tostring(#args) .. " args)"
 	titleLabel.Parent = row
 
 	local copyBtn = Instance.new("TextButton")

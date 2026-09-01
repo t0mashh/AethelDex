@@ -104,7 +104,7 @@ function ScriptViewer.new(parentFrame: Frame): ScriptViewer
 end
 
 function ScriptViewer:ViewScript(scriptInst: Instance)
-	self._title.Text = `Viewing: {scriptInst.Name} [{scriptInst.ClassName}]`
+	self._title.Text = "Viewing: " .. scriptInst.Name .. " [" .. scriptInst.ClassName .. "]"
 	self._codeLabel.Text = "Decompiling / Fetching source, please wait..."
 
 	task.spawn(function()
@@ -116,7 +116,7 @@ function ScriptViewer:ViewScript(scriptInst: Instance)
 			if ok and typeof(res) == "string" then
 				source = res
 			else
-				source = `-- Decompile failed: {tostring(res)}`
+				source = "-- Decompile failed: " .. tostring(res)
 			end
 		else
 			-- Try reading .Source property (works in Studio / privileged environments)
@@ -141,11 +141,11 @@ function ScriptViewer:ViewScript(scriptInst: Instance)
 		-- Highlight keywords
 		local keywords = { "local", "function", "return", "if", "then", "else", "elseif", "end", "for", "in", "do", "while", "repeat", "until" }
 		for _, kw in ipairs(keywords) do
-			highlighted = string.gsub(highlighted, "%f[%a]" .. kw .. "%f[%A]", `<font color="#4f75ff"><b>{kw}</b></font>`)
+			highlighted = string.gsub(highlighted, "%f[%a]" .. kw .. "%f[%A]", '<font color="#4f75ff"><b>' .. kw .. '</b></font>')
 		end
 
 		-- Highlight comments
-		highlighted = string.gsub(highlighted, "(%-%-[^\n]*)", `<font color="#737887"><i>%1</i></font>`)
+		highlighted = string.gsub(highlighted, "(%-%-[^\n]*)", '<font color="#737887"><i>%1</i></font>')
 
 		self._codeLabel.Text = highlighted
 

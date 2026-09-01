@@ -149,7 +149,7 @@ function WindowManager.new(parentGui: ScreenGui, onTabSwitched: (tabId: string) 
 
 	for _, def in ipairs(tabDefs) do
 		local btn = Instance.new("TextButton")
-		btn.Name = `Tab_{def.Id}`
+		btn.Name = "Tab_" .. def.Id
 		btn.Size = UDim2.fromOffset(80, 26)
 		btn.Position = UDim2.fromOffset(0, 5)
 		btn.BackgroundColor3 = Theme.BgElevated

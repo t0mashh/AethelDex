@@ -55,7 +55,7 @@ function VirtualList.new(parentFrame: Frame, treeState: TreeState.TreeState): Vi
 	-- Instantiate the recycled pool of UI rows
 	for i = 1, visibleRows do
 		local row = Instance.new("Frame")
-		row.Name = `Row_{i}`
+		row.Name = "Row_" .. tostring(i)
 		row.Size = UDim2.new(1, 0, 0, rowHeight)
 		row.BackgroundTransparency = 1
 		row.BorderSizePixel = 0

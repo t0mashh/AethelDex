@@ -110,7 +110,7 @@ function NilScanner:Scan()
 
 	for i, inst in ipairs(nilList) do
 		local row = Instance.new("Frame")
-		row.Name = `Nil_{i}`
+		row.Name = "Nil_" .. tostring(i)
 		row.Size = UDim2.new(1, -8, 0, 26)
 		row.Position = UDim2.fromOffset(4, 0)
 		row.BackgroundColor3 = Theme.BgElevated
@@ -130,7 +130,7 @@ function NilScanner:Scan()
 		nameLabel.Font = Enum.Font.SourceSans
 		nameLabel.TextXAlignment = Enum.TextXAlignment.Left
 		nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-		nameLabel.Text = `{inst.Name} [{inst.ClassName}]`
+		nameLabel.Text = inst.Name .. " [" .. inst.ClassName .. "]"
 		nameLabel.Parent = row
 
 		local restoreBtn = Instance.new("TextButton")

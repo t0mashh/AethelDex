@@ -118,7 +118,7 @@ function PropertiesView:Refresh()
 		if prop.Category ~= currentCategory then
 			currentCategory = prop.Category
 			local catHeader = Instance.new("Frame")
-			catHeader.Name = `Cat_{currentCategory}`
+			catHeader.Name = "Cat_" .. currentCategory
 			catHeader.Size = UDim2.new(1, 0, 0, 20)
 			catHeader.BackgroundColor3 = Theme.BgElevated
 			catHeader.BorderSizePixel = 0
@@ -140,7 +140,7 @@ function PropertiesView:Refresh()
 
 		-- Property row
 		local row = Instance.new("Frame")
-		row.Name = `Prop_{prop.Name}`
+		row.Name = "Prop_" .. prop.Name
 		row.Size = UDim2.new(1, 0, 0, 24)
 		row.BackgroundColor3 = Theme.BgSurface
 		row.BorderSizePixel = 0
