@@ -108,39 +108,3 @@ loadstring(readfile("AethelDex.luau"))()
 │       ├── TouchEngine.luau      # Mobile touch support
 │       └── WindowManager.luau    # Draggable & dockable window manager
 ```
-
----
-
-## 🔨 How to Build / Modify
-
-1. Make any edits to the modular files inside `src/`.
-2. Run the PowerShell bundle script:
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File .\build\bundle.ps1
-   ```
-3. `AethelDex.luau` will be automatically recompiled and ready for distribution!
-
----
-
-## 📤 Publishing to GitHub
-
-To publish this project to GitHub:
-
-```bash
-git init
-git add .
-git commit -m "feat: initial release of AethelDex v1.0.0-PRO"
-git branch -M main
-git remote add origin https://github.com/t0mashh/AethelDex.git
-git push -u origin main
-```
-
-Once pushed, anyone can load it via:
-```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/t0mashh/AethelDex/main/AethelDex.luau"))()
-```
-
----
-
-## 📄 License
-MIT License. Created for advanced Roblox game developers, security researchers, and UI/UX designers.
