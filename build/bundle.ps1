@@ -39,7 +39,7 @@ $bundleContent = @"
     Next-Generation In-Game DataModel Hierarchy Explorer & Debugger Suite for Roblox
     
     Loadstring Usage:
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/REPLACE_WITH_USER/AethelDex/main/AethelDex.luau"))()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/t0mashh/AethelDex/main/AethelDex.luau"))()
     ================================================================================
 --]]
 

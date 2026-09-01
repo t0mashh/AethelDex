@@ -11,10 +11,10 @@ A ground-up, high-performance re-engineering of the legendary **Dark Dex**, rebu
 Execute this one-liner in your environment to run AethelDex instantly:
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/AethelDex/main/AethelDex.luau"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/t0mashh/AethelDex/main/AethelDex.luau"))()
 ```
 
-*(Replace `YOUR_GITHUB_USERNAME` with your actual GitHub username once pushed!)*
+*(Replace `t0mashh` with your actual GitHub username once pushed!)*
 
 Or load directly from a local file in Studio / executor:
 ```lua
@@ -131,13 +131,13 @@ git init
 git add .
 git commit -m "feat: initial release of AethelDex v1.0.0-PRO"
 git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/AethelDex.git
+git remote add origin https://github.com/t0mashh/AethelDex.git
 git push -u origin main
 ```
 
 Once pushed, anyone can load it via:
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/YOUR_USERNAME/AethelDex/main/AethelDex.luau"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/t0mashh/AethelDex/main/AethelDex.luau"))()
 ```
 
 ---
