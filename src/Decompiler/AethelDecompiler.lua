@@ -1,7 +1,7 @@
 --[[
     ================================================================================
-    AethelDex Multi-Tier Decompiler Suite
-    Universal Luau Decompiler Engine (Native + Cloud + In-Engine Bytecode Lifting)
+    AethelDex Advanced Multi-Tier Decompiler Suite
+    Universal Luau Decompiler Engine (Native + Cloud + In-Engine Bytecode Lifting + Deep Module Introspection)
     ================================================================================
 --]]
 
@@ -9,6 +9,38 @@ local scriptViewerWindow = nil
 local scriptViewerBox = nil
 local scriptViewerTitle = nil
 local currentScript = nil
+
+-- [[ Environment Helper: Safe Global Lookup ]]
+-- In executors, APIs like decompile, getscriptbytecode, request are stored in getgenv() or _G.
+local function getGlobal(name)
+	local val = nil
+	pcall(function()
+		if typeof(getgenv) == "function" then
+			local g = getgenv()
+			if g and g[name] ~= nil then
+				val = g[name]
+				return
+			end
+		end
+		if _G and _G[name] ~= nil then
+			val = _G[name]
+			return
+		end
+		if typeof(getrenv) == "function" then
+			local r = getrenv()
+			if r and r[name] ~= nil then
+				val = r[name]
+				return
+			end
+		end
+		local env = getfenv and getfenv()
+		if env and env[name] ~= nil then
+			val = env[name]
+			return
+		end
+	end)
+	return val
+end
 
 -- [[ Built-In Luau Bytecode Engine ]]
 function f.disassembleLuauBytecode(bytecode, scriptInst)
@@ -64,6 +96,7 @@ function f.disassembleLuauBytecode(bytecode, scriptInst)
 	local remotes = {}
 	local services = {}
 	local urls = {}
+	local assetIds = {}
 	
 	for i = 1, stringCount do
 		local slen = readVarInt()
@@ -73,10 +106,12 @@ function f.disassembleLuauBytecode(bytecode, scriptInst)
 		local lower = string.lower(str)
 		if string.find(lower, "remote", 1, true) or string.find(lower, "event", 1, true) or string.find(lower, "fire", 1, true) then
 			table.insert(remotes, str)
-		elseif string.find(lower, "service", 1, true) or str == "Workspace" or str == "Players" or str == "Lighting" or str == "ReplicatedStorage" then
+		elseif string.find(lower, "service", 1, true) or str == "Workspace" or str == "Players" or str == "Lighting" or str == "ReplicatedStorage" or str == "ContentProvider" then
 			table.insert(services, str)
 		elseif string.find(lower, "http://", 1, true) or string.find(lower, "https://", 1, true) or string.find(lower, "discord", 1, true) then
 			table.insert(urls, str)
+		elseif string.find(lower, "rbxassetid://", 1, true) or string.find(str, "^%d%d%d%d%d+$") then
+			table.insert(assetIds, str)
 		end
 	end
 	
@@ -148,7 +183,7 @@ function f.disassembleLuauBytecode(bytecode, scriptInst)
 	local lines = {}
 	table.insert(lines, "--[[")
 	table.insert(lines, "    ================================================================================")
-	table.insert(lines, "    AethelDex Universal Decompiler v1.0 [Built-In Luau Bytecode Engine]")
+	table.insert(lines, "    AethelDex Universal Decompiler v1.0 [Luau Bytecode Engine]")
 	table.insert(lines, "    Script: " .. (scriptInst and scriptInst:GetFullName() or "Unknown"))
 	table.insert(lines, "    Class: " .. (scriptInst and scriptInst.ClassName or "LuaSourceContainer"))
 	table.insert(lines, "    Bytecode: Luau v" .. version .. " | Protos: " .. protoCount .. " | Strings: " .. stringCount)
@@ -167,6 +202,18 @@ function f.disassembleLuauBytecode(bytecode, scriptInst)
 		table.insert(lines, "")
 	end
 	
+	if #assetIds > 0 then
+		table.insert(lines, "-- [[ Detected Assets & Animations ]]")
+		local seen = {}
+		for _, a in ipairs(assetIds) do
+			if not seen[a] then
+				seen[a] = true
+				table.insert(lines, '-- Asset: ' .. a)
+			end
+		end
+		table.insert(lines, "")
+	end
+
 	if #remotes > 0 then
 		table.insert(lines, "-- [[ Detected Remotes & Events ]]")
 		local seen = {}
@@ -189,14 +236,14 @@ function f.disassembleLuauBytecode(bytecode, scriptInst)
 
 	table.insert(lines, "-- [[ Extracted String Constants ]]")
 	table.insert(lines, "local Strings = {")
-	for i = 1, math.min(stringCount, 60) do
+	for i = 1, math.min(stringCount, 80) do
 		local s = stringTable[i]
 		if s and #s > 0 then
 			table.insert(lines, string.format('    [%d] = %q,', i, s))
 		end
 	end
-	if stringCount > 60 then
-		table.insert(lines, "    -- ... (" .. (stringCount - 60) .. " more string constants omitted)")
+	if stringCount > 80 then
+		table.insert(lines, "    -- ... (" .. (stringCount - 80) .. " more string constants omitted)")
 	end
 	table.insert(lines, "}\n")
 
@@ -213,7 +260,7 @@ function f.disassembleLuauBytecode(bytecode, scriptInst)
 		
 		table.insert(lines, string.format("local function %s(%s) -- Proto %d (Stack: %d, Upvalues: %d)", pName, table.concat(paramList, ", "), p - 1, pr.maxstacksize, pr.numupvalues))
 		
-		for j = 1, math.min(#pr.instructions, 40) do
+		for j = 1, math.min(#pr.instructions, 60) do
 			local ins = pr.instructions[j]
 			local op = band(ins, 0xFF)
 			local rA = band(rshift(ins, 8), 0xFF)
@@ -249,8 +296,8 @@ function f.disassembleLuauBytecode(bytecode, scriptInst)
 				table.insert(lines, string.format("    local r%d = {}", rA))
 			end
 		end
-		if #pr.instructions > 40 then
-			table.insert(lines, "    -- ... (" .. (#pr.instructions - 40) .. " remaining instructions)")
+		if #pr.instructions > 60 then
+			table.insert(lines, "    -- ... (" .. (#pr.instructions - 60) .. " remaining instructions)")
 		end
 		table.insert(lines, "end\n")
 	end
@@ -258,12 +305,139 @@ function f.disassembleLuauBytecode(bytecode, scriptInst)
 	return table.concat(lines, "\n")
 end
 
--- [[ ModuleScript In-Memory Reflection ]]
-function f.reflectModule(scriptInst, modData)
+-- [[ Deep Function Decompiler ]]
+function f.decompileFunction(fn, fnName)
+	-- 1. Try native decompile on closure
+	local nativeDecompile = getGlobal("decompile")
+	if type(nativeDecompile) == "function" then
+		local ok, code = pcall(nativeDecompile, fn)
+		if ok and type(code) == "string" and #code > 10 and not string.find(code, "failed", 1, true) then
+			return code
+		end
+	end
+
+	-- 2. Try dumping closure bytecode
+	local dump = getGlobal("dumpstring") or string.dump
+	if type(dump) == "function" then
+		local ok, bc = pcall(dump, fn)
+		if ok and type(bc) == "string" and #bc > 0 then
+			local res = f.disassembleLuauBytecode(bc, nil)
+			if res and #res > 30 then
+				return res
+			end
+		end
+	end
+
+	-- 3. Advanced Function Introspection via getconstants / getupvalues / getprotos / debug
+	local getconstants = getGlobal("getconstants") or (debug and debug.getconstants)
+	local getupvalues = getGlobal("getupvalues") or (debug and debug.getupvalues)
+	local getprotos = getGlobal("getprotos") or (debug and debug.getprotos)
+	local getinfo = getGlobal("getinfo") or (debug and debug.getinfo)
+
+	local lines = {}
+	local info = {}
+	if type(getinfo) == "function" then pcall(function() info = getinfo(fn) end) end
+
+	local constants = {}
+	if type(getconstants) == "function" then pcall(function() constants = getconstants(fn) end) end
+
+	local upvalues = {}
+	if type(getupvalues) == "function" then pcall(function() upvalues = getupvalues(fn) end) end
+
+	local protos = {}
+	if type(getprotos) == "function" then pcall(function() protos = getprotos(fn) end) end
+
+	local paramCount = info.numparams or 0
+	local params = {}
+	for i = 1, paramCount do table.insert(params, "arg" .. i) end
+	if info.is_vararg == 1 then table.insert(params, "...") end
+
+	table.insert(lines, string.format("function %s(%s)", fnName, table.concat(params, ", ")))
+
+	-- Upvalues
+	if #upvalues > 0 then
+		table.insert(lines, "    -- Upvalues captured by function:")
+		for k, v in pairs(upvalues) do
+			if type(v) == "string" then
+				table.insert(lines, string.format("    --   upval_%s = %q", tostring(k), v))
+			else
+				table.insert(lines, string.format("    --   upval_%s = %s", tostring(k), tostring(v)))
+			end
+		end
+	end
+
+	-- Constants (Remotes, Assets, Services)
+	if #constants > 0 then
+		local assetsFound = {}
+		local remotesFound = {}
+		local methodsFound = {}
+		local otherConstants = {}
+
+		for _, c in pairs(constants) do
+			if type(c) == "string" then
+				local lower = string.lower(c)
+				if string.find(lower, "rbxassetid://", 1, true) or string.find(c, "^%d%d%d%d%d+$") then
+					table.insert(assetsFound, c)
+				elseif string.find(lower, "remote", 1, true) or string.find(lower, "event", 1, true) then
+					table.insert(remotesFound, c)
+				elseif string.find(lower, "preload", 1, true) or string.find(lower, "connect", 1, true) or string.find(lower, "fire", 1, true) or string.find(lower, "wait", 1, true) then
+					table.insert(methodsFound, c)
+				else
+					table.insert(otherConstants, c)
+				end
+			else
+				table.insert(otherConstants, tostring(c))
+			end
+		end
+
+		if #assetsFound > 0 then
+			table.insert(lines, "    -- Target Assets / Animations:")
+			for _, a in ipairs(assetsFound) do
+				table.insert(lines, string.format("    --   Asset: %q", a))
+			end
+		end
+
+		if #remotesFound > 0 then
+			table.insert(lines, "    -- Referenced Remotes:")
+			for _, r in ipairs(remotesFound) do
+				table.insert(lines, string.format("    --   Remote: %q", r))
+			end
+		end
+
+		if #methodsFound > 0 then
+			table.insert(lines, "    -- Invoked APIs & Methods:")
+			for _, m in ipairs(methodsFound) do
+				table.insert(lines, string.format("    --   :%s(...)", m))
+			end
+		end
+
+		if #otherConstants > 0 then
+			table.insert(lines, "    -- Constants:")
+			for _, oc in ipairs(otherConstants) do
+				table.insert(lines, string.format("    --   %s", tostring(oc)))
+			end
+		end
+	end
+
+	-- Sub-functions
+	if #protos > 0 then
+		table.insert(lines, "    -- Inner Nested Functions:")
+		for idx, subfn in ipairs(protos) do
+			local subcode = f.decompileFunction(subfn, fnName .. "_sub" .. idx)
+			table.insert(lines, "    " .. subcode:gsub("\n", "\n    "))
+		end
+	end
+
+	table.insert(lines, "end\n")
+	return table.concat(lines, "\n")
+end
+
+-- [[ Deep ModuleScript Decompilation ]]
+function f.deepDecompileModule(scriptInst, modData)
 	local lines = {}
 	table.insert(lines, "--[[")
 	table.insert(lines, "    ================================================================================")
-	table.insert(lines, "    AethelDex In-Memory ModuleScript Reflection")
+	table.insert(lines, "    AethelDex Deep ModuleScript Decompiler")
 	table.insert(lines, "    Module: " .. scriptInst:GetFullName())
 	table.insert(lines, "    Exported Type: " .. type(modData))
 	table.insert(lines, "    ================================================================================")
@@ -271,27 +445,59 @@ function f.reflectModule(scriptInst, modData)
 
 	if type(modData) == "table" then
 		table.insert(lines, "local Module = {}\n")
-		for k, v in pairs(modData) do
-			local keyStr = tostring(k)
-			if type(k) == "string" and string.match(k, "^[%a_][%w_]*$") then
-				keyStr = "." .. k
-			else
-				keyStr = string.format("[%q]", tostring(k))
-			end
 
-			if type(v) == "function" then
-				table.insert(lines, string.format("function Module%s(...)\n    -- [Exported Function in %s]\nend\n", keyStr, scriptInst.Name))
-			elseif type(v) == "table" then
-				table.insert(lines, string.format("Module%s = { -- [Subtable] }\n", keyStr))
-			elseif type(v) == "string" then
-				table.insert(lines, string.format("Module%s = %q\n", keyStr, v))
-			else
-				table.insert(lines, string.format("Module%s = %s\n", keyStr, tostring(v)))
+		-- First pass: data fields
+		for k, v in pairs(modData) do
+			if type(v) ~= "function" then
+				local keyStr = tostring(k)
+				if type(k) == "string" and string.match(k, "^[%a_][%w_]*$") then
+					keyStr = "." .. k
+				else
+					keyStr = string.format("[%q]", tostring(k))
+				end
+
+				if type(v) == "table" then
+					local subKeys = {}
+					pcall(function()
+						for sk, sv in pairs(v) do
+							if #subKeys < 20 then
+								table.insert(subKeys, string.format("        [%q] = %s,", tostring(sk), tostring(sv)))
+							end
+						end
+					end)
+					if #subKeys > 0 then
+						table.insert(lines, string.format("Module%s = {\n%s\n}\n", keyStr, table.concat(subKeys, "\n")))
+					else
+						table.insert(lines, string.format("Module%s = {}\n", keyStr))
+					end
+				elseif type(v) == "string" then
+					table.insert(lines, string.format("Module%s = %q\n", keyStr, v))
+				else
+					table.insert(lines, string.format("Module%s = %s\n", keyStr, tostring(v)))
+				end
 			end
 		end
+
+		-- Second pass: deep function decompilation
+		for k, v in pairs(modData) do
+			if type(v) == "function" then
+				local keyStr = tostring(k)
+				if type(k) == "string" and string.match(k, "^[%a_][%w_]*$") then
+					keyStr = "." .. k
+				else
+					keyStr = string.format("[%q]", tostring(k))
+				end
+
+				local fnCode = f.decompileFunction(v, "Module" .. keyStr)
+				table.insert(lines, fnCode)
+			end
+		end
+
 		table.insert(lines, "return Module")
 	elseif type(modData) == "function" then
-		table.insert(lines, "return function(...)\n    -- [Executable Function exported by " .. scriptInst.Name .. "]\nend")
+		local fnCode = f.decompileFunction(modData, scriptInst.Name)
+		table.insert(lines, fnCode)
+		table.insert(lines, "return " .. scriptInst.Name)
 	else
 		table.insert(lines, "return " .. tostring(modData))
 	end
@@ -301,9 +507,10 @@ end
 
 -- [[ Decompiler Diagnostic Fallback ]]
 function f.generateDecompileDiagnostic(scriptInst)
-	local hasDecompile = (type(rawget(getfenv(), "decompile")) == "function")
-	local hasBytecode = (type(rawget(getfenv(), "getscriptbytecode") or rawget(getfenv(), "get_script_bytecode") or rawget(getfenv(), "dumpstring")) == "function")
-	local hasRequest = (type(rawget(getfenv(), "request") or rawget(getfenv(), "http_request")) == "function")
+	local hasDecompile = (type(getGlobal("decompile")) == "function")
+	local hasBytecode = (type(getGlobal("getscriptbytecode") or getGlobal("get_script_bytecode") or getGlobal("dumpstring")) == "function")
+	local hasClosure = (type(getGlobal("getscriptclosure")) == "function")
+	local hasRequest = (type(getGlobal("request") or getGlobal("http_request")) == "function")
 
 	local lines = {
 		"-- ================================================================================",
@@ -314,6 +521,7 @@ function f.generateDecompileDiagnostic(scriptInst)
 		"-- [Executor Environment Status]:",
 		"--   * Native decompile(): " .. (hasDecompile and "AVAILABLE" or "NOT FOUND"),
 		"--   * Bytecode Extraction (getscriptbytecode): " .. (hasBytecode and "AVAILABLE" or "NOT FOUND"),
+		"--   * Script Closure Access (getscriptclosure): " .. (hasClosure and "AVAILABLE" or "NOT FOUND"),
 		"--   * HTTP Networking (request / http_request): " .. (hasRequest and "AVAILABLE" or "NOT FOUND"),
 		"--",
 		"-- [Analysis]:",
@@ -334,42 +542,63 @@ end
 function f.decompileScript(scriptInst)
 	if not scriptInst then return "-- [Error]: Invalid script instance" end
 
-	-- Tier 1: Native Executor Decompiler
-	local nativeDecompile = rawget(getfenv(), "decompile")
-	if type(nativeDecompile) == "function" then
-		local ok, res = pcall(nativeDecompile, scriptInst)
-		if ok and type(res) == "string" and #res > 0 and not string.find(res, "failed to decompile", 1, true) then
+	local decompile = getGlobal("decompile")
+	local getscriptbytecode = getGlobal("getscriptbytecode") 
+		or getGlobal("get_script_bytecode") 
+		or getGlobal("dumpstring")
+		or getGlobal("getbytecode")
+	local getscriptclosure = getGlobal("getscriptclosure")
+	local httpRequest = getGlobal("request") 
+		or getGlobal("http_request") 
+		or (getGlobal("syn") and type(getGlobal("syn")) == "table" and getGlobal("syn").request)
+		or (getGlobal("http") and type(getGlobal("http")) == "table" and getGlobal("http").request)
+
+	-- 1. Native decompile(scriptInst)
+	if type(decompile) == "function" then
+		local ok, res = pcall(decompile, scriptInst)
+		if ok and type(res) == "string" and #res > 30 and not string.find(res, "failed to decompile", 1, true) then
 			return res
 		end
 	end
 
-	-- Tier 2: Plain Source (Studio or executor source bypass)
+	-- 2. Plain Source
 	local hasSource, rawSource = pcall(function() return scriptInst.Source end)
 	if hasSource and type(rawSource) == "string" and #rawSource > 0 then
 		return rawSource
 	end
 
-	-- Tier 3: Bytecode Extraction
-	local getbytecode = rawget(getfenv(), "getscriptbytecode") 
-		or rawget(getfenv(), "get_script_bytecode") 
-		or rawget(getfenv(), "dumpstring")
-		or rawget(getfenv(), "getbytecode")
-
+	-- 3. Extract Bytecode from script instance
 	local bytecode = nil
-	if type(getbytecode) == "function" then
-		local ok, bc = pcall(getbytecode, scriptInst)
+	if type(getscriptbytecode) == "function" then
+		local ok, bc = pcall(getscriptbytecode, scriptInst)
 		if ok and type(bc) == "string" and #bc > 0 then
 			bytecode = bc
 		end
 	end
 
-	-- Tier 4: Cloud / Konstant API Decompilation
-	if bytecode then
-		local httpRequest = rawget(getfenv(), "request") 
-			or rawget(getfenv(), "http_request") 
-			or (rawget(getfenv(), "syn") and type(rawget(getfenv(), "syn")) == "table" and rawget(getfenv(), "syn").request)
-			or (rawget(getfenv(), "http") and type(rawget(getfenv(), "http")) == "table" and rawget(getfenv(), "http").request)
+	-- If getscriptbytecode failed, try getscriptclosure + dump
+	if not bytecode and type(getscriptclosure) == "function" then
+		local ok, closure = pcall(getscriptclosure, scriptInst)
+		if ok and type(closure) == "function" then
+			if type(decompile) == "function" then
+				local ok2, res2 = pcall(decompile, closure)
+				if ok2 and type(res2) == "string" and #res2 > 30 and not string.find(res2, "failed", 1, true) then
+					return res2
+				end
+			end
+			local dump = getGlobal("dumpstring") or string.dump
+			if type(dump) == "function" then
+				local ok3, bc = pcall(dump, closure)
+				if ok3 and type(bc) == "string" and #bc > 0 then
+					bytecode = bc
+				end
+			end
+		end
+	end
 
+	-- 4. Process Bytecode (Cloud API -> Local Engine)
+	if bytecode then
+		-- 4a. Cloud Decompiler API (Konstant)
 		if type(httpRequest) == "function" then
 			local ok, resp = pcall(function()
 				return httpRequest({
@@ -380,29 +609,29 @@ function f.decompileScript(scriptInst)
 					Timeout = 4
 				})
 			end)
-			if ok and type(resp) == "table" and (resp.StatusCode == 200 or resp.Status == 200) and type(resp.Body) == "string" and #resp.Body > 20 then
+			if ok and type(resp) == "table" and (resp.StatusCode == 200 or resp.Status == 200) and type(resp.Body) == "string" and #resp.Body > 30 then
 				return resp.Body
 			end
 		end
 
-		-- Tier 5: Built-In Offline Luau Bytecode Engine
+		-- 4b. In-Engine Luau Bytecode Engine
 		local ok, analyzed = pcall(function() return f.disassembleLuauBytecode(bytecode, scriptInst) end)
-		if ok and type(analyzed) == "string" and #analyzed > 0 then
+		if ok and type(analyzed) == "string" and #analyzed > 50 then
 			return analyzed
 		end
 	end
 
-	-- Tier 6: ModuleScript In-Memory Reflection
+	-- 5. Deep ModuleScript Decompilation & Introspection
 	local isModule = false
 	pcall(function() isModule = scriptInst:IsA("ModuleScript") end)
 	if isModule then
 		local ok, modData = pcall(require, scriptInst)
 		if ok then
-			return f.reflectModule(scriptInst, modData)
+			return f.deepDecompileModule(scriptInst, modData)
 		end
 	end
 
-	-- Tier 7: Diagnostic Report
+	-- 6. Diagnostic Report
 	return f.generateDecompileDiagnostic(scriptInst)
 end
 
@@ -410,7 +639,7 @@ function f.saveScript(scriptInst)
 	if not scriptInst then return end
 	local source = f.decompileScript(scriptInst)
 	pcall(function()
-		local writefile = (rawget(getfenv(), "writefile"))
+		local writefile = getGlobal("writefile")
 		if type(writefile) == "function" then
 			local filename = scriptInst.Name:gsub("[^%w_%-]", "_") .. "_" .. scriptInst.ClassName .. ".lua"
 			writefile(filename, source)
@@ -486,7 +715,7 @@ function f.viewScript(scriptInst)
 		copyBtn.MouseButton1Click:Connect(function()
 			if scriptViewerBox then
 				pcall(function()
-					local setclipboard = (rawget(getfenv(), "setclipboard") or rawget(getfenv(), "toclipboard"))
+					local setclipboard = getGlobal("setclipboard") or getGlobal("toclipboard")
 					if type(setclipboard) == "function" then
 						setclipboard(scriptViewerBox.Text)
 					end

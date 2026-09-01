@@ -42,14 +42,14 @@ function createDexGui()
 \t-- Stealth parenting
 \tlocal hostParent = nil
 \tpcall(function()
-\t\tlocal gethui = (rawget(getfenv(), "gethui"))
+\t\tlocal gethui = (typeof(getgenv) == "function" and getgenv().gethui) or (typeof(gethui) == "function" and gethui)
 \t\tif typeof(gethui) == "function" then
 \t\t\thostParent = gethui()
 \t\tend
 \tend)
 \tif not hostParent then
 \t\tpcall(function()
-\t\t\tlocal syn = (rawget(getfenv(), "syn"))
+\t\t\tlocal syn = (typeof(getgenv) == "function" and getgenv().syn) or syn
 \t\t\tif syn and typeof(syn.protect_gui) == "function" then
 \t\t\t\tsyn.protect_gui(DexGui)
 \t\t\tend
