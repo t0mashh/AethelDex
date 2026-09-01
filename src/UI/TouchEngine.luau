@@ -16,7 +16,7 @@ local TouchEngine = {}
 TouchEngine.IsTouchDevice = UserInputService.TouchEnabled
 TouchEngine.MinHitboxSize = TouchEngine.IsTouchDevice and 44 or 24
 
-function TouchEngine.CreateMobileToggle(onToggle: () -> ()): ImageButton
+function TouchEngine.CreateMobileToggle(onToggle)
 	local button = Instance.new("ImageButton")
 	button.Name = "AethelDex_MobileToggle"
 	button.Size = UDim2.fromOffset(50, 50)
@@ -38,8 +38,8 @@ function TouchEngine.CreateMobileToggle(onToggle: () -> ()): ImageButton
 
 	-- Dragging logic for mobile floating button
 	local dragging = false
-	local dragStart: Vector2
-	local startPos: UDim2
+	local dragStart
+	local startPos
 
 	button.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then

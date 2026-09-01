@@ -16,8 +16,8 @@ export type SafeHost = {
 local SafeHost = {}
 SafeHost.__index = SafeHost
 
-local function getSafeRef(inst: Instance): Instance
-	local cloneref = (rawget(getfenv(), "cloneref") :: any)
+local function getSafeRef(inst)
+	local cloneref = (rawget(getfenv(), "cloneref") )
 	if typeof(cloneref) == "function" then
 		local success, result = pcall(cloneref, inst)
 		if success and typeof(result) == "Instance" then
@@ -27,7 +27,7 @@ local function getSafeRef(inst: Instance): Instance
 	return inst
 end
 
-function SafeHost.new(customName: string?): SafeHost
+function SafeHost.new(customName)
 	local name = customName or ("AethelDex_" .. string.sub(HttpService:GenerateGUID(false), 1, 8))
 	local screenGui = Instance.new("ScreenGui")
 	screenGui.Name = name
@@ -35,11 +35,11 @@ function SafeHost.new(customName: string?): SafeHost
 	screenGui.DisplayOrder = 999999
 	screenGui.IgnoreGuiInset = true
 
-	local hostContainer: Instance = CoreGui
+	local hostContainer = CoreGui
 	local isStealth = false
 
-	local gethui = (rawget(getfenv(), "gethui") :: any)
-	local syn = (rawget(getfenv(), "syn") :: any)
+	local gethui = (rawget(getfenv(), "gethui") )
+	local syn = (rawget(getfenv(), "syn") )
 
 	if typeof(gethui) == "function" then
 		local success, hui = pcall(gethui)
@@ -79,7 +79,7 @@ function SafeHost.new(customName: string?): SafeHost
 		IsStealth = isStealth,
 	}, SafeHost)
 
-	return (self :: any) :: SafeHost
+	return self
 end
 
 function SafeHost:Destroy()

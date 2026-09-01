@@ -2,38 +2,18 @@
 -- [Signal.luau]
 -- Ultra-fast linked-list based Signal implementation for AethelDex
 
-export type Connection = {
-	Connected: boolean,
-	Disconnect: (self: Connection) -> (),
-}
-
-export type Signal<T...> = {
-	Connect: (self: Signal<T...>, fn: (T...) -> ()) -> Connection,
-	Once: (self: Signal<T...>, fn: (T...) -> ()) -> Connection,
-	Wait: (self: Signal<T...>) -> T...,
-	Fire: (self: Signal<T...>, T...) -> (),
-	DisconnectAll: (self: Signal<T...>) -> (),
-}
-
-type Node = {
-	fn: (...any) -> (),
-	next: Node?,
-	prev: Node?,
-	connected: boolean,
-}
-
 local Signal = {}
 Signal.__index = Signal
 
-function Signal.new<T...>(): Signal<T...>
+function Signal.new()
 	local self = setmetatable({
-		_head = nil :: Node?,
+		_head = nil,
 	}, Signal)
-	return (self :: any) :: Signal<T...>
+	return self
 end
 
-function Signal:Connect(fn: (...any) -> ()): Connection
-	local node: Node = {
+function Signal:Connect(fn)
+	local node = {
 		fn = fn,
 		next = self._head,
 		prev = nil,
@@ -45,10 +25,10 @@ function Signal:Connect(fn: (...any) -> ()): Connection
 	end
 	self._head = node
 
-	local connection: Connection
+	local connection
 	connection = {
 		Connected = true,
-		Disconnect = function(conn: Connection)
+		Disconnect = function(conn)
 			if not node.connected then
 				return
 			end
@@ -70,8 +50,8 @@ function Signal:Connect(fn: (...any) -> ()): Connection
 	return connection
 end
 
-function Signal:Once(fn: (...any) -> ()): Connection
-	local connection: Connection
+function Signal:Once(fn)
+	local connection
 	connection = self:Connect(function(...)
 		connection:Disconnect()
 		fn(...)
@@ -79,9 +59,9 @@ function Signal:Once(fn: (...any) -> ()): Connection
 	return connection
 end
 
-function Signal:Wait(): ...any
+function Signal:Wait()
 	local thread = coroutine.running()
-	local connection: Connection
+	local connection
 	connection = self:Connect(function(...)
 		connection:Disconnect()
 		task.spawn(thread, ...)
@@ -89,7 +69,7 @@ function Signal:Wait(): ...any
 	return coroutine.yield()
 end
 
-function Signal:Fire(...: any)
+function Signal:Fire(...)
 	local current = self._head
 	while current do
 		local nextNode = current.next

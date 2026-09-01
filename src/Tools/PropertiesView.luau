@@ -17,7 +17,7 @@ export type PropertiesView = {
 local PropertiesView = {}
 PropertiesView.__index = PropertiesView
 
-function PropertiesView.new(parentFrame: Frame): PropertiesView
+function PropertiesView.new(parentFrame)
 	local container = Instance.new("Frame")
 	container.Name = "PropertiesContainer"
 	container.Size = UDim2.fromScale(1, 1)
@@ -73,10 +73,10 @@ function PropertiesView.new(parentFrame: Frame): PropertiesView
 		self:Refresh()
 	end)
 
-	return (self :: any) :: PropertiesView
+	return self
 end
 
-function PropertiesView:SetTarget(inst: Instance?)
+function PropertiesView:SetTarget(inst)
 	self.CurrentTarget = inst
 	self:Refresh()
 end
@@ -110,12 +110,9 @@ function PropertiesView:Refresh()
 	local rowOrder = 1
 
 	for _, prop in ipairs(props) do
-		if filter ~= "" and not string.find(string.lower(prop.Name), filter, 1, true) then
-			continue
-		end
-
-		-- Category header
-		if prop.Category ~= currentCategory then
+		if filter == "" or string.find(string.lower(prop.Name), filter, 1, true) then
+			-- Category header
+			if prop.Category ~= currentCategory then
 			currentCategory = prop.Category
 			local catHeader = Instance.new("Frame")
 			catHeader.Name = "Cat_" .. currentCategory
@@ -189,7 +186,7 @@ function PropertiesView:Refresh()
 						task.delay(1, function()
 							valBox.TextColor3 = Theme.TextPrimary
 							local currentVal = pcall(function()
-								return (target :: any)[prop.Name]
+								return (target )[prop.Name]
 							end)
 							valBox.Text = Serializers.FormatValue(currentVal, prop.Type)
 						end)
@@ -201,6 +198,7 @@ function PropertiesView:Refresh()
 					end
 				end
 			end)
+		end
 		end
 	end
 end

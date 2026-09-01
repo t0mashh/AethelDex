@@ -32,21 +32,20 @@ $modules = @(
 )
 
 $bundleContent = @"
---!strict
 --[[
     ================================================================================
     AethelDex v1.0.0-PRO (Build 2026)
     Next-Generation In-Game DataModel Hierarchy Explorer & Debugger Suite for Roblox
     
     Loadstring Usage:
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/t0mashh/AethelDex/main/AethelDex.luau"))()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/t0mashh/AethelDex/main/AethelDex.lua"))()
     ================================================================================
 --]]
 
 local __modules = {}
 local __cache = {}
 
-local function __require(name: string): any
+local function __require(name)
     if __cache[name] ~= nil then
         return __cache[name]
     end
@@ -94,6 +93,8 @@ return Main
 "@
 
 Set-Content -Path $outputFile -Value $bundleContent -Encoding UTF8
+$stripScript = Join-Path $PSScriptRoot "strip_types.js"
+node $stripScript
 Write-Host "Successfully generated standalone bundle: $outputFile" -ForegroundColor Green
 $fileSize = (Get-Item $outputFile).Length
 Write-Host "Bundle size: $fileSize bytes ($([math]::Round($fileSize / 1KB, 2)) KB)" -ForegroundColor Yellow

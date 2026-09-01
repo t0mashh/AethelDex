@@ -11,19 +11,19 @@ export type MatchResult = {
 
 local SearchEngine = {}
 
-function SearchEngine.FilterNodes(nodes: { TreeState.Node }, query: string): { TreeState.Node }
+function SearchEngine.FilterNodes(nodes, query)
 	local trimmed = string.gsub(query, "^%s*(.-)%s*$", "%1")
 	if trimmed == "" then
 		return nodes
 	end
 
-	local results: { TreeState.Node } = {}
+	local results = {}
 
 	-- Check for prefix filters
-	local classFilter: string? = nil
-	local propFilterName: string? = nil
-	local propFilterValue: string? = nil
-	local tagFilter: string? = nil
+	local classFilter = nil
+	local propFilterName = nil
+	local propFilterValue = nil
+	local tagFilter = nil
 	local rawTerm = trimmed
 
 	if string.sub(trimmed, 1, 2) == "c:" then
@@ -58,7 +58,7 @@ function SearchEngine.FilterNodes(nodes: { TreeState.Node }, query: string): { T
 			end
 		elseif propFilterName then
 			local ok, val = pcall(function()
-				return (inst :: any)[propFilterName :: string]
+				return (inst )[propFilterName ]
 			end)
 			if ok and val ~= nil then
 				if propFilterValue then

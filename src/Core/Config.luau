@@ -22,7 +22,7 @@ export type DexConfig = {
 	},
 }
 
-local Config: DexConfig = {
+local Config = {
 	Version = "1.0.0-PRO",
 	BuildYear = 2026,
 	ThemeName = "Obsidian",

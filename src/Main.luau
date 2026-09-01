@@ -60,9 +60,9 @@ function AethelDex.Init()
 
 	-- 4. Setup Main Window Manager
 	local activeTab = "explorer"
-	local tabContainers: { [string]: Frame } = {}
+	local tabContainers = {}
 
-	local windowMgr: WindowManager.WindowManager
+	local windowMgr
 	windowMgr = WindowManager.new(host.RootGui, function(tabId)
 		activeTab = tabId
 		for id, container in pairs(tabContainers) do
@@ -72,7 +72,7 @@ function AethelDex.Init()
 	janitor:Add(windowMgr)
 
 	-- 5. Create Tab Views
-	local function createTabContainer(name: string): Frame
+	local function createTabContainer(name)
 		local frame = Instance.new("Frame")
 		frame.Name = "TabContent_" .. name
 		frame.Size = UDim2.fromScale(1, 1)

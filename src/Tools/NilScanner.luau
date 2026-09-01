@@ -14,7 +14,7 @@ export type NilScanner = {
 local NilScanner = {}
 NilScanner.__index = NilScanner
 
-function NilScanner.new(parentFrame: Frame): NilScanner
+function NilScanner.new(parentFrame)
 	local container = Instance.new("Frame")
 	container.Name = "NilScannerContainer"
 	container.Size = UDim2.fromScale(1, 1)
@@ -75,7 +75,7 @@ function NilScanner.new(parentFrame: Frame): NilScanner
 		self:Scan()
 	end)
 
-	return (self :: any) :: NilScanner
+	return self
 end
 
 function NilScanner:Scan()
@@ -86,8 +86,8 @@ function NilScanner:Scan()
 		end
 	end
 
-	local nilList: { Instance } = {}
-	local getnilinstances = (rawget(getfenv(), "getnilinstances") :: any) or (rawget(getfenv(), "get_nil_instances") :: any)
+	local nilList = {}
+	local getnilinstances = (rawget(getfenv(), "getnilinstances") ) or (rawget(getfenv(), "get_nil_instances") )
 
 	if typeof(getnilinstances) == "function" then
 		local ok, res = pcall(getnilinstances)

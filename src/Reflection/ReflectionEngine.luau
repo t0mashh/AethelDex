@@ -16,7 +16,7 @@ export type PropertyItem = {
 local ReflectionEngine = {}
 
 -- Standard property categorizations
-local CATEGORY_MAP: { [string]: string } = {
+local CATEGORY_MAP = {
 	-- Identity & Hierarchy
 	Name = "Data",
 	Parent = "Data",
@@ -93,13 +93,13 @@ local COMMON_PROPERTY_NAMES = {
 	"Brightness", "Range", "Shadows", "FieldOfView"
 }
 
-function ReflectionEngine.GetProperties(target: Instance): { PropertyItem }
-	local result: { PropertyItem } = {}
-	local seen: { [string]: boolean } = {}
+function ReflectionEngine.GetProperties(target)
+	local result = {}
+	local seen = {}
 
 	-- 1. Try executor native reflection if present (e.g. getproperties / gethiddenproperties)
-	local getproperties = (rawget(getfenv(), "getproperties") :: any)
-	local gethiddenproperties = (rawget(getfenv(), "gethiddenproperties") :: any)
+	local getproperties = (rawget(getfenv(), "getproperties") )
+	local gethiddenproperties = (rawget(getfenv(), "gethiddenproperties") )
 
 	if typeof(getproperties) == "function" then
 		local ok, props = pcall(getproperties, target)
@@ -141,7 +141,7 @@ function ReflectionEngine.GetProperties(target: Instance): { PropertyItem }
 	for _, propName in ipairs(COMMON_PROPERTY_NAMES) do
 		if not seen[propName] then
 			local ok, val = pcall(function()
-				return (target :: any)[propName]
+				return (target )[propName]
 			end)
 
 			if ok and val ~= nil then
@@ -169,14 +169,14 @@ function ReflectionEngine.GetProperties(target: Instance): { PropertyItem }
 	return result
 end
 
-function ReflectionEngine.SetProperty(target: Instance, propName: string, newValueStr: string, propType: string): (boolean, string?)
+function ReflectionEngine.SetProperty(target, propName, newValueStr, propType)
 	local parseOk, parsedValue = Serializers.ParseValue(newValueStr, propType)
 	if not parseOk then
 		return false, tostring(parsedValue)
 	end
 
 	-- Try native sethiddenproperty first if available
-	local sethiddenproperty = (rawget(getfenv(), "sethiddenproperty") :: any)
+	local sethiddenproperty = (rawget(getfenv(), "sethiddenproperty") )
 	if typeof(sethiddenproperty) == "function" then
 		local sOk, sErr = pcall(sethiddenproperty, target, propName, parsedValue)
 		if sOk then
@@ -185,7 +185,7 @@ function ReflectionEngine.SetProperty(target: Instance, propName: string, newVal
 	end
 
 	local ok, err = pcall(function()
-		(target :: any)[propName] = parsedValue
+		(target )[propName] = parsedValue
 	end)
 
 	return ok, err

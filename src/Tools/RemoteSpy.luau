@@ -26,7 +26,7 @@ export type RemoteSpy = {
 local RemoteSpy = {}
 RemoteSpy.__index = RemoteSpy
 
-function RemoteSpy.new(parentFrame: Frame): RemoteSpy
+function RemoteSpy.new(parentFrame)
 	local container = Instance.new("Frame")
 	container.Name = "RemoteSpyContainer"
 	container.Size = UDim2.fromScale(1, 1)
@@ -94,7 +94,7 @@ function RemoteSpy.new(parentFrame: Frame): RemoteSpy
 
 	local self = setmetatable({
 		Container = container,
-		Logs = {} :: { LogEntry },
+		Logs = {},
 		IsActive = true,
 		_scroll = logScroll,
 		_toggleBtn = toggleBtn,
@@ -116,15 +116,15 @@ function RemoteSpy.new(parentFrame: Frame): RemoteSpy
 	-- Automatically attach network hooks
 	self:HookNetwork()
 
-	return (self :: any) :: RemoteSpy
+	return self
 end
 
 function RemoteSpy:HookNetwork()
-	local hookmetamethod = (rawget(getfenv(), "hookmetamethod") :: any)
-	local checkcaller = (rawget(getfenv(), "checkcaller") :: any)
+	local hookmetamethod = (rawget(getfenv(), "hookmetamethod") )
+	local checkcaller = (rawget(getfenv(), "checkcaller") )
 
 	if typeof(hookmetamethod) == "function" and typeof(checkcaller) == "function" then
-		local oldNamecall: any
+		local oldNamecall
 		oldNamecall = hookmetamethod(game, "__namecall", function(selfRemote, ...)
 			local method = getnamecallmethod()
 			if not checkcaller() and (method == "FireServer" or method == "InvokeServer") then
@@ -140,13 +140,13 @@ function RemoteSpy:HookNetwork()
 	end
 end
 
-function RemoteSpy:AddLog(remote: Instance, method: string, args: { any })
+function RemoteSpy:AddLog(remote, method, args)
 	if not self.IsActive then
 		return
 	end
 
 	self._counter += 1
-	local entry: LogEntry = {
+	local entry = {
 		Id = self._counter,
 		Time = os.date("%X"),
 		Remote = remote,
@@ -197,7 +197,7 @@ function RemoteSpy:AddLog(remote: Instance, method: string, args: { any })
 
 	copyBtn.MouseButton1Click:Connect(function()
 		local code = self:GenerateScript(remote, method, args)
-		local setclipboard = (rawget(getfenv(), "setclipboard") :: any)
+		local setclipboard = (rawget(getfenv(), "setclipboard") )
 		if typeof(setclipboard) == "function" then
 			setclipboard(code)
 			copyBtn.Text = "Copied!"
@@ -208,7 +208,7 @@ function RemoteSpy:AddLog(remote: Instance, method: string, args: { any })
 	end)
 end
 
-function RemoteSpy:GenerateScript(remote: Instance, method: string, args: { any }): string
+function RemoteSpy:GenerateScript(remote, method, args)
 	local fullPath = remote:GetFullName()
 	local formattedArgs = {}
 	for _, arg in ipairs(args) do

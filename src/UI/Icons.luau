@@ -5,7 +5,7 @@
 local Icons = {}
 
 -- Standard Roblox Studio class icons mapped to rbxassetid
-local CLASS_ICONS: { [string]: string } = {
+local CLASS_ICONS = {
 	Workspace = "rbxassetid://6031075931",
 	Players = "rbxassetid://6031075931",
 	Lighting = "rbxassetid://6031075931",
@@ -43,7 +43,7 @@ local CLASS_ICONS: { [string]: string } = {
 
 local DEFAULT_ICON = "rbxassetid://6031075931"
 
-function Icons.GetClassIcon(className: string): string
+function Icons.GetClassIcon(className)
 	return CLASS_ICONS[className] or DEFAULT_ICON
 end
 

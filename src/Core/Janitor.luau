@@ -2,32 +2,17 @@
 -- [Janitor.luau]
 -- Safe lifecycle management and connection cleaner for AethelDex
 
-export type Destructible =
-	RBXScriptConnection
-	| Instance
-	| () -> ()
-	| thread
-	| { Destroy: (any) -> () }
-	| { Disconnect: (any) -> () }
-
-export type Janitor = {
-	Add: <T>(self: Janitor, object: T, methodName: string?) -> T,
-	Remove: (self: Janitor, object: any) -> (),
-	Cleanup: (self: Janitor) -> (),
-	Destroy: (self: Janitor) -> (),
-}
-
 local Janitor = {}
 Janitor.__index = Janitor
 
-function Janitor.new(): Janitor
+function Janitor.new()
 	local self = setmetatable({
-		_objects = {} :: { [any]: any },
+		_objects = {},
 	}, Janitor)
-	return (self :: any) :: Janitor
+	return self
 end
 
-function Janitor:Add<T>(object: T, methodName: string?): T
+function Janitor:Add(object, methodName)
 	if object == nil then
 		return object
 	end
@@ -35,11 +20,11 @@ function Janitor:Add<T>(object: T, methodName: string?): T
 	return object
 end
 
-function Janitor:Remove(object: any)
+function Janitor:Remove(object)
 	self._objects[object] = nil
 end
 
-local function cleanObject(object: any, method: any)
+local function cleanObject(object, method)
 	if typeof(object) == "RBXScriptConnection" then
 		object:Disconnect()
 	elseif typeof(object) == "Instance" then

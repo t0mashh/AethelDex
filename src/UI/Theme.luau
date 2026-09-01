@@ -35,7 +35,7 @@ export type Theme = {
 	FontBold: Font,
 }
 
-local Theme: Theme = {
+local Theme = {
 	BgBase = Color3.fromRGB(18, 19, 23),
 	BgSurface = Color3.fromRGB(25, 27, 33),
 	BgElevated = Color3.fromRGB(33, 36, 44),

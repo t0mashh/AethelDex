@@ -13,7 +13,7 @@ export type ScriptViewer = {
 local ScriptViewer = {}
 ScriptViewer.__index = ScriptViewer
 
-function ScriptViewer.new(parentFrame: Frame): ScriptViewer
+function ScriptViewer.new(parentFrame)
 	local container = Instance.new("Frame")
 	container.Name = "ScriptViewerContainer"
 	container.Size = UDim2.fromScale(1, 1)
@@ -90,7 +90,7 @@ function ScriptViewer.new(parentFrame: Frame): ScriptViewer
 	}, ScriptViewer)
 
 	copyBtn.MouseButton1Click:Connect(function()
-		local setclipboard = (rawget(getfenv(), "setclipboard") :: any)
+		local setclipboard = (rawget(getfenv(), "setclipboard") )
 		if typeof(setclipboard) == "function" and self._currentCode ~= "" then
 			setclipboard(self._currentCode)
 			copyBtn.Text = "Copied!"
@@ -100,16 +100,16 @@ function ScriptViewer.new(parentFrame: Frame): ScriptViewer
 		end
 	end)
 
-	return (self :: any) :: ScriptViewer
+	return self
 end
 
-function ScriptViewer:ViewScript(scriptInst: Instance)
+function ScriptViewer:ViewScript(scriptInst)
 	self._title.Text = "Viewing: " .. scriptInst.Name .. " [" .. scriptInst.ClassName .. "]"
 	self._codeLabel.Text = "Decompiling / Fetching source, please wait..."
 
 	task.spawn(function()
 		local source = ""
-		local decompile = (rawget(getfenv(), "decompile") :: any)
+		local decompile = (rawget(getfenv(), "decompile") )
 
 		if typeof(decompile) == "function" then
 			local ok, res = pcall(decompile, scriptInst)
@@ -121,7 +121,7 @@ function ScriptViewer:ViewScript(scriptInst: Instance)
 		else
 			-- Try reading .Source property (works in Studio / privileged environments)
 			local ok, res = pcall(function()
-				return (scriptInst :: any).Source
+				return (scriptInst ).Source
 			end)
 			if ok and typeof(res) == "string" then
 				source = res

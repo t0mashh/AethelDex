@@ -17,7 +17,7 @@ export type WindowManager = {
 local WindowManager = {}
 WindowManager.__index = WindowManager
 
-function WindowManager.new(parentGui: ScreenGui, onTabSwitched: (tabId: string) -> ()): WindowManager
+function WindowManager.new(parentGui, onTabSwitched)
 	local window = Instance.new("Frame")
 	window.Name = "AethelDex_MainWindow"
 	window.Size = UDim2.fromOffset(680, 520)
@@ -99,14 +99,14 @@ function WindowManager.new(parentGui: ScreenGui, onTabSwitched: (tabId: string) 
 		RootWindow = window,
 		ContentArea = contentArea,
 		CurrentTab = "explorer",
-		_tabButtons = {} :: { [string]: TextButton },
+		_tabButtons = {},
 		_onTabSwitched = onTabSwitched,
 	}, WindowManager)
 
 	-- Dragging mechanics
 	local dragging = false
-	local dragStart: Vector2
-	local startPos: UDim2
+	local dragStart
+	local startPos
 
 	titleBar.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -171,10 +171,10 @@ function WindowManager.new(parentGui: ScreenGui, onTabSwitched: (tabId: string) 
 		self._tabButtons[def.Id] = btn
 	end
 
-	return (self :: any) :: WindowManager
+	return self
 end
 
-function WindowManager:SwitchTab(tabId: string)
+function WindowManager:SwitchTab(tabId)
 	self.CurrentTab = tabId
 	for id, btn in pairs(self._tabButtons) do
 		if id == tabId then

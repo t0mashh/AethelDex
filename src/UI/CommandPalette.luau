@@ -17,7 +17,7 @@ export type CommandPalette = {
 local CommandPalette = {}
 CommandPalette.__index = CommandPalette
 
-function CommandPalette.new(parentGui: ScreenGui, onAction: (actionId: string, payload: any?) -> ()): CommandPalette
+function CommandPalette.new(parentGui, onAction)
 	local overlay = Instance.new("Frame")
 	overlay.Name = "PaletteOverlay"
 	overlay.Size = UDim2.fromScale(1, 1)
@@ -99,7 +99,7 @@ function CommandPalette.new(parentGui: ScreenGui, onAction: (actionId: string, p
 
 	self:PopulateStandardCommands()
 
-	return (self :: any) :: CommandPalette
+	return self
 end
 
 function CommandPalette:PopulateStandardCommands()

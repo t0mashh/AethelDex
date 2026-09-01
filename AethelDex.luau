@@ -1,18 +1,17 @@
-﻿--!strict
 --[[
     ================================================================================
     AethelDex v1.0.0-PRO (Build 2026)
     Next-Generation In-Game DataModel Hierarchy Explorer & Debugger Suite for Roblox
     
     Loadstring Usage:
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/t0mashh/AethelDex/main/AethelDex.luau"))()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/t0mashh/AethelDex/main/AethelDex.lua"))()
     ================================================================================
 --]]
 
 local __modules = {}
 local __cache = {}
 
-local function __require(name: string): any
+local function __require(name)
     if __cache[name] ~= nil then
         return __cache[name]
     end
@@ -30,38 +29,18 @@ __modules["Signal"] = function()
     -- [Signal.luau]
     -- Ultra-fast linked-list based Signal implementation for AethelDex
     
-    export type Connection = {
-    	Connected: boolean,
-    	Disconnect: (self: Connection) -> (),
-    }
-    
-    export type Signal<T...> = {
-    	Connect: (self: Signal<T...>, fn: (T...) -> ()) -> Connection,
-    	Once: (self: Signal<T...>, fn: (T...) -> ()) -> Connection,
-    	Wait: (self: Signal<T...>) -> T...,
-    	Fire: (self: Signal<T...>, T...) -> (),
-    	DisconnectAll: (self: Signal<T...>) -> (),
-    }
-    
-    type Node = {
-    	fn: (...any) -> (),
-    	next: Node?,
-    	prev: Node?,
-    	connected: boolean,
-    }
-    
     local Signal = {}
     Signal.__index = Signal
     
-    function Signal.new<T...>(): Signal<T...>
+    function Signal.new()
     	local self = setmetatable({
-    		_head = nil :: Node?,
+    		_head = nil,
     	}, Signal)
-    	return (self :: any) :: Signal<T...>
+    	return self
     end
     
-    function Signal:Connect(fn: (...any) -> ()): Connection
-    	local node: Node = {
+    function Signal:Connect(fn)
+    	local node = {
     		fn = fn,
     		next = self._head,
     		prev = nil,
@@ -73,10 +52,10 @@ __modules["Signal"] = function()
     	end
     	self._head = node
     
-    	local connection: Connection
+    	local connection
     	connection = {
     		Connected = true,
-    		Disconnect = function(conn: Connection)
+    		Disconnect = function(conn)
     			if not node.connected then
     				return
     			end
@@ -98,8 +77,8 @@ __modules["Signal"] = function()
     	return connection
     end
     
-    function Signal:Once(fn: (...any) -> ()): Connection
-    	local connection: Connection
+    function Signal:Once(fn)
+    	local connection
     	connection = self:Connect(function(...)
     		connection:Disconnect()
     		fn(...)
@@ -107,9 +86,9 @@ __modules["Signal"] = function()
     	return connection
     end
     
-    function Signal:Wait(): ...any
+    function Signal:Wait()
     	local thread = coroutine.running()
-    	local connection: Connection
+    	local connection
     	connection = self:Connect(function(...)
     		connection:Disconnect()
     		task.spawn(thread, ...)
@@ -117,7 +96,7 @@ __modules["Signal"] = function()
     	return coroutine.yield()
     end
     
-    function Signal:Fire(...: any)
+    function Signal:Fire(...)
     	local current = self._head
     	while current do
     		local nextNode = current.next
@@ -145,32 +124,17 @@ __modules["Janitor"] = function()
     -- [Janitor.luau]
     -- Safe lifecycle management and connection cleaner for AethelDex
     
-    export type Destructible =
-    	RBXScriptConnection
-    	| Instance
-    	| () -> ()
-    	| thread
-    	| { Destroy: (any) -> () }
-    	| { Disconnect: (any) -> () }
-    
-    export type Janitor = {
-    	Add: <T>(self: Janitor, object: T, methodName: string?) -> T,
-    	Remove: (self: Janitor, object: any) -> (),
-    	Cleanup: (self: Janitor) -> (),
-    	Destroy: (self: Janitor) -> (),
-    }
-    
     local Janitor = {}
     Janitor.__index = Janitor
     
-    function Janitor.new(): Janitor
+    function Janitor.new()
     	local self = setmetatable({
-    		_objects = {} :: { [any]: any },
+    		_objects = {},
     	}, Janitor)
-    	return (self :: any) :: Janitor
+    	return self
     end
     
-    function Janitor:Add<T>(object: T, methodName: string?): T
+    function Janitor:Add(object, methodName)
     	if object == nil then
     		return object
     	end
@@ -178,11 +142,11 @@ __modules["Janitor"] = function()
     	return object
     end
     
-    function Janitor:Remove(object: any)
+    function Janitor:Remove(object)
     	self._objects[object] = nil
     end
     
-    local function cleanObject(object: any, method: any)
+    local function cleanObject(object, method)
     	if typeof(object) == "RBXScriptConnection" then
     		object:Disconnect()
     	elseif typeof(object) == "Instance" then
@@ -223,27 +187,8 @@ __modules["Config"] = function()
     -- [Config.luau]
     -- Central configuration, settings, and constants for AethelDex v1.0
     
-    export type DexConfig = {
-    	Version: string,
-    	BuildYear: number,
-    	ThemeName: string,
-    	RowHeight: number,
-    	FontSize: number,
-    	MaxCachedNodes: number,
-    	AutoDecompile: boolean,
-    	RemoteSpyEnabled: boolean,
-    	MobileMode: boolean,
-    	Keybindings: {
-    		ToggleDex: Enum.KeyCode,
-    		CommandPalette: Enum.KeyCode,
-    		Search: Enum.KeyCode,
-    		Copy: Enum.KeyCode,
-    		Paste: Enum.KeyCode,
-    		Delete: Enum.KeyCode,
-    	},
-    }
     
-    local Config: DexConfig = {
+    local Config = {
     	Version = "1.0.0-PRO",
     	BuildYear = 2026,
     	ThemeName = "Obsidian",
@@ -276,12 +221,7 @@ __modules["Scheduler"] = function()
     -- Maximum time in seconds to spend in a single frame before yielding to avoid dropping FPS
     local DEFAULT_FRAME_BUDGET = 0.006 -- 6 milliseconds
     
-    function Scheduler.ChunkedIterate<T>(
-    	list: { T },
-    	processItem: (item: T, index: number) -> boolean?,
-    	onComplete: (() -> ())?,
-    	maxTimePerFrame: number?
-    )
+    function Scheduler.ChunkedIterate(list, processItem, onComplete, maxTimePerFrame)
     	local budget = maxTimePerFrame or DEFAULT_FRAME_BUDGET
     	local total = #list
     	local index = 1
@@ -295,7 +235,7 @@ __modules["Scheduler"] = function()
     				break
     			end
     
-    			index += 1
+    			index = index + 1
     
     			if os.clock() - startTime >= budget then
     				task.wait()
@@ -309,11 +249,11 @@ __modules["Scheduler"] = function()
     	end)
     end
     
-    function Scheduler.Defer(fn: () -> ())
+    function Scheduler.Defer(fn)
     	task.defer(fn)
     end
     
-    function Scheduler.Delay(seconds: number, fn: () -> ())
+    function Scheduler.Delay(seconds, fn)
     	task.delay(seconds, fn)
     end
     
@@ -329,18 +269,12 @@ __modules["SafeHost"] = function()
     local Players = game:GetService("Players")
     local HttpService = game:GetService("HttpService")
     
-    export type SafeHost = {
-    	RootGui: ScreenGui,
-    	Container: Instance,
-    	IsStealth: boolean,
-    	Destroy: (self: SafeHost) -> (),
-    }
     
     local SafeHost = {}
     SafeHost.__index = SafeHost
     
-    local function getSafeRef(inst: Instance): Instance
-    	local cloneref = (rawget(getfenv(), "cloneref") :: any)
+    local function getSafeRef(inst)
+    	local cloneref = (rawget(getfenv(), "cloneref") )
     	if typeof(cloneref) == "function" then
     		local success, result = pcall(cloneref, inst)
     		if success and typeof(result) == "Instance" then
@@ -350,7 +284,7 @@ __modules["SafeHost"] = function()
     	return inst
     end
     
-    function SafeHost.new(customName: string?): SafeHost
+    function SafeHost.new(customName)
     	local name = customName or ("AethelDex_" .. string.sub(HttpService:GenerateGUID(false), 1, 8))
     	local screenGui = Instance.new("ScreenGui")
     	screenGui.Name = name
@@ -358,11 +292,11 @@ __modules["SafeHost"] = function()
     	screenGui.DisplayOrder = 999999
     	screenGui.IgnoreGuiInset = true
     
-    	local hostContainer: Instance = CoreGui
+    	local hostContainer = CoreGui
     	local isStealth = false
     
-    	local gethui = (rawget(getfenv(), "gethui") :: any)
-    	local syn = (rawget(getfenv(), "syn") :: any)
+    	local gethui = (rawget(getfenv(), "gethui") )
+    	local syn = (rawget(getfenv(), "syn") )
     
     	if typeof(gethui) == "function" then
     		local success, hui = pcall(gethui)
@@ -402,7 +336,7 @@ __modules["SafeHost"] = function()
     		IsStealth = isStealth,
     	}, SafeHost)
     
-    	return (self :: any) :: SafeHost
+    	return self
     end
     
     function SafeHost:Destroy()
@@ -419,45 +353,9 @@ __modules["TypeDefinitions"] = function()
     -- [TypeDefinitions.luau]
     -- Core type definitions for AethelDex v1.0
     
-    export type TreeNode = {
-    	Instance: Instance,
-    	Depth: number,
-    	HasChildren: boolean,
-    	IsExpanded: boolean,
-    	Visible: boolean,
-    	Children: { TreeNode },
-    	Parent: TreeNode?,
-    	CustomIcon: string?,
-    }
     
-    export type PropertyDescriptor = {
-    	Name: string,
-    	ValueType: string,
-    	Category: string,
-    	IsReadOnly: boolean,
-    	IsHidden: boolean,
-    	Value: any,
-    }
     
-    export type NetworkCallLog = {
-    	Id: string,
-    	Timestamp: number,
-    	Remote: Instance,
-    	RemoteType: "RemoteEvent" | "RemoteFunction" | "UnreliableRemoteEvent",
-    	Method: "FireServer" | "InvokeServer" | "OnClientEvent",
-    	Arguments: { any },
-    	CallerScript: Instance?,
-    	Blocked: boolean,
-    }
     
-    export type SearchFilter = {
-    	Query: string,
-    	ClassName: string?,
-    	PropertyName: string?,
-    	PropertyValue: string?,
-    	Tag: string?,
-    	IsRegex: boolean,
-    }
     
     return {}
 end
@@ -469,7 +367,7 @@ __modules["Serializers"] = function()
     
     local Serializers = {}
     
-    function Serializers.FormatValue(val: any, valType: string?): string
+    function Serializers.FormatValue(val, valType)
     	local t = valType or typeof(val)
     
     	if val == nil then
@@ -513,7 +411,7 @@ __modules["Serializers"] = function()
     	end
     end
     
-    function Serializers.ParseValue(inputStr: string, targetType: string): (boolean, any)
+    function Serializers.ParseValue(inputStr, targetType)
     	if targetType == "string" then
     		return true, inputStr
     	elseif targetType == "number" then
@@ -579,40 +477,8 @@ __modules["Theme"] = function()
     -- [Theme.luau]
     -- Fluent 2026 Design Tokens, colors, typography, and layout metrics
     
-    export type Theme = {
-    	-- Backgrounds
-    	BgBase: Color3,
-    	BgSurface: Color3,
-    	BgElevated: Color3,
-    	BgHover: Color3,
-    	BgSelected: Color3,
     
-    	-- Borders & Strokes
-    	BorderSubtle: Color3,
-    	BorderStrong: Color3,
-    
-    	-- Accents
-    	Accent: Color3,
-    	AccentHover: Color3,
-    	AccentSuccess: Color3,
-    	AccentWarning: Color3,
-    	AccentDanger: Color3,
-    
-    	-- Text
-    	TextPrimary: Color3,
-    	TextSecondary: Color3,
-    	TextMuted: Color3,
-    
-    	-- Dimensions & Corner Radii
-    	CornerRadius: number,
-    	CornerRadiusSmall: number,
-    	RowHeight: number,
-    	FontSize: number,
-    	Font: Font,
-    	FontBold: Font,
-    }
-    
-    local Theme: Theme = {
+    local Theme = {
     	BgBase = Color3.fromRGB(18, 19, 23),
     	BgSurface = Color3.fromRGB(25, 27, 33),
     	BgElevated = Color3.fromRGB(33, 36, 44),
@@ -651,7 +517,7 @@ __modules["Icons"] = function()
     local Icons = {}
     
     -- Standard Roblox Studio class icons mapped to rbxassetid
-    local CLASS_ICONS: { [string]: string } = {
+    local CLASS_ICONS = {
     	Workspace = "rbxassetid://6031075931",
     	Players = "rbxassetid://6031075931",
     	Lighting = "rbxassetid://6031075931",
@@ -689,7 +555,7 @@ __modules["Icons"] = function()
     
     local DEFAULT_ICON = "rbxassetid://6031075931"
     
-    function Icons.GetClassIcon(className: string): string
+    function Icons.GetClassIcon(className)
     	return CLASS_ICONS[className] or DEFAULT_ICON
     end
     
@@ -715,18 +581,13 @@ __modules["TouchEngine"] = function()
     local UserInputService = game:GetService("UserInputService")
     local Theme = __require("Theme")
     
-    export type TouchEngine = {
-    	IsTouchDevice: boolean,
-    	MinHitboxSize: number,
-    	CreateMobileToggle: (onToggle: () -> ()) -> ImageButton,
-    }
     
     local TouchEngine = {}
     
     TouchEngine.IsTouchDevice = UserInputService.TouchEnabled
     TouchEngine.MinHitboxSize = TouchEngine.IsTouchDevice and 44 or 24
     
-    function TouchEngine.CreateMobileToggle(onToggle: () -> ()): ImageButton
+    function TouchEngine.CreateMobileToggle(onToggle)
     	local button = Instance.new("ImageButton")
     	button.Name = "AethelDex_MobileToggle"
     	button.Size = UDim2.fromOffset(50, 50)
@@ -748,8 +609,8 @@ __modules["TouchEngine"] = function()
     
     	-- Dragging logic for mobile floating button
     	local dragging = false
-    	local dragStart: Vector2
-    	local startPos: UDim2
+    	local dragStart
+    	local startPos
     
     	button.InputBegan:Connect(function(input)
     		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -792,19 +653,11 @@ __modules["ReflectionEngine"] = function()
     
     local Serializers = __require("Serializers")
     
-    export type PropertyItem = {
-    	Name: string,
-    	Value: any,
-    	Type: string,
-    	Category: string,
-    	IsReadOnly: boolean,
-    	IsHidden: boolean,
-    }
     
     local ReflectionEngine = {}
     
     -- Standard property categorizations
-    local CATEGORY_MAP: { [string]: string } = {
+    local CATEGORY_MAP = {
     	-- Identity & Hierarchy
     	Name = "Data",
     	Parent = "Data",
@@ -881,13 +734,13 @@ __modules["ReflectionEngine"] = function()
     	"Brightness", "Range", "Shadows", "FieldOfView"
     }
     
-    function ReflectionEngine.GetProperties(target: Instance): { PropertyItem }
-    	local result: { PropertyItem } = {}
-    	local seen: { [string]: boolean } = {}
+    function ReflectionEngine.GetProperties(target)
+    	local result = {}
+    	local seen = {}
     
     	-- 1. Try executor native reflection if present (e.g. getproperties / gethiddenproperties)
-    	local getproperties = (rawget(getfenv(), "getproperties") :: any)
-    	local gethiddenproperties = (rawget(getfenv(), "gethiddenproperties") :: any)
+    	local getproperties = (rawget(getfenv(), "getproperties") )
+    	local gethiddenproperties = (rawget(getfenv(), "gethiddenproperties") )
     
     	if typeof(getproperties) == "function" then
     		local ok, props = pcall(getproperties, target)
@@ -929,7 +782,7 @@ __modules["ReflectionEngine"] = function()
     	for _, propName in ipairs(COMMON_PROPERTY_NAMES) do
     		if not seen[propName] then
     			local ok, val = pcall(function()
-    				return (target :: any)[propName]
+    				return (target )[propName]
     			end)
     
     			if ok and val ~= nil then
@@ -957,14 +810,14 @@ __modules["ReflectionEngine"] = function()
     	return result
     end
     
-    function ReflectionEngine.SetProperty(target: Instance, propName: string, newValueStr: string, propType: string): (boolean, string?)
+    function ReflectionEngine.SetProperty(target, propName, newValueStr, propType)
     	local parseOk, parsedValue = Serializers.ParseValue(newValueStr, propType)
     	if not parseOk then
     		return false, tostring(parsedValue)
     	end
     
     	-- Try native sethiddenproperty first if available
-    	local sethiddenproperty = (rawget(getfenv(), "sethiddenproperty") :: any)
+    	local sethiddenproperty = (rawget(getfenv(), "sethiddenproperty") )
     	if typeof(sethiddenproperty) == "function" then
     		local sOk, sErr = pcall(sethiddenproperty, target, propName, parsedValue)
     		if sOk then
@@ -973,7 +826,7 @@ __modules["ReflectionEngine"] = function()
     	end
     
     	local ok, err = pcall(function()
-    		(target :: any)[propName] = parsedValue
+    		(target )[propName] = parsedValue
     	end)
     
     	return ok, err
@@ -989,55 +842,29 @@ __modules["TreeState"] = function()
     
     local Signal = __require("Signal")
     
-    export type Node = {
-    	Instance: Instance,
-    	Depth: number,
-    	Expanded: boolean,
-    	HasChildren: boolean,
-    	ParentNode: Node?,
-    	Children: { Node },
-    }
     
-    export type TreeState = {
-    	RootNodes: { Node },
-    	NodeMap: { [Instance]: Node },
-    	FlattenedList: { Node },
-    	SelectedInstances: { [Instance]: boolean },
-    	SelectionList: { Instance },
-    	
-    	OnSelectionChanged: Signal.Signal<{ Instance }>,
-    	OnTreeStructureChanged: Signal.Signal<()>,
-    
-    	ToggleExpand: (self: TreeState, node: Node) -> (),
-    	SetExpanded: (self: TreeState, node: Node, expanded: boolean) -> (),
-    	Select: (self: TreeState, inst: Instance, isMulti: boolean?) -> (),
-    	Deselect: (self: TreeState, inst: Instance) -> (),
-    	ClearSelection: (self: TreeState) -> (),
-    	RebuildFlattened: (self: TreeState) -> (),
-    	AddRootService: (self: TreeState, service: Instance) -> (),
-    }
     
     local TreeState = {}
     TreeState.__index = TreeState
     
-    function TreeState.new(): TreeState
+    function TreeState.new()
     	local self = setmetatable({
-    		RootNodes = {} :: { Node },
-    		NodeMap = {} :: { [Instance]: Node },
-    		FlattenedList = {} :: { Node },
-    		SelectedInstances = {} :: { [Instance]: boolean },
-    		SelectionList = {} :: { Instance },
+    		RootNodes = {},
+    		NodeMap = {},
+    		FlattenedList = {},
+    		SelectedInstances = {},
+    		SelectionList = {},
     
     		OnSelectionChanged = Signal.new(),
     		OnTreeStructureChanged = Signal.new(),
     	}, TreeState)
     
-    	return (self :: any) :: TreeState
+    	return self
     end
     
-    function TreeState:CreateNode(inst: Instance, depth: number, parentNode: Node?): Node
+    function TreeState:CreateNode(inst, depth, parentNode)
     	local hasKids = #inst:GetChildren() > 0
-    	local node: Node = {
+    	local node = {
     		Instance = inst,
     		Depth = depth,
     		Expanded = false,
@@ -1049,7 +876,7 @@ __modules["TreeState"] = function()
     	return node
     end
     
-    function TreeState:AddRootService(service: Instance)
+    function TreeState:AddRootService(service)
     	if self.NodeMap[service] then
     		return
     	end
@@ -1058,7 +885,7 @@ __modules["TreeState"] = function()
     	self:RebuildFlattened()
     end
     
-    function TreeState:PopulateChildren(node: Node)
+    function TreeState:PopulateChildren(node)
     	local children = node.Instance:GetChildren()
     	node.HasChildren = #children > 0
     	table.clear(node.Children)
@@ -1075,11 +902,11 @@ __modules["TreeState"] = function()
     	end
     end
     
-    function TreeState:ToggleExpand(node: Node)
+    function TreeState:ToggleExpand(node)
     	self:SetExpanded(node, not node.Expanded)
     end
     
-    function TreeState:SetExpanded(node: Node, expanded: boolean)
+    function TreeState:SetExpanded(node, expanded)
     	if node.Expanded == expanded then
     		return
     	end
@@ -1093,7 +920,7 @@ __modules["TreeState"] = function()
     	self.OnTreeStructureChanged:Fire()
     end
     
-    local function flattenRecursive(node: Node, output: { Node })
+    local function flattenRecursive(node, output)
     	table.insert(output, node)
     	if node.Expanded then
     		for _, child in ipairs(node.Children) do
@@ -1109,7 +936,7 @@ __modules["TreeState"] = function()
     	end
     end
     
-    function TreeState:Select(inst: Instance, isMulti: boolean?)
+    function TreeState:Select(inst, isMulti)
     	if not isMulti then
     		table.clear(self.SelectedInstances)
     		table.clear(self.SelectionList)
@@ -1123,7 +950,7 @@ __modules["TreeState"] = function()
     	self.OnSelectionChanged:Fire(self.SelectionList)
     end
     
-    function TreeState:Deselect(inst: Instance)
+    function TreeState:Deselect(inst)
     	if self.SelectedInstances[inst] then
     		self.SelectedInstances[inst] = nil
     		for i, selected in ipairs(self.SelectionList) do
@@ -1152,26 +979,22 @@ __modules["SearchEngine"] = function()
     
     local TreeState = __require("TreeState")
     
-    export type MatchResult = {
-    	Node: TreeState.Node,
-    	MatchedText: string,
-    }
     
     local SearchEngine = {}
     
-    function SearchEngine.FilterNodes(nodes: { TreeState.Node }, query: string): { TreeState.Node }
+    function SearchEngine.FilterNodes(nodes, query)
     	local trimmed = string.gsub(query, "^%s*(.-)%s*$", "%1")
     	if trimmed == "" then
     		return nodes
     	end
     
-    	local results: { TreeState.Node } = {}
+    	local results = {}
     
     	-- Check for prefix filters
-    	local classFilter: string? = nil
-    	local propFilterName: string? = nil
-    	local propFilterValue: string? = nil
-    	local tagFilter: string? = nil
+    	local classFilter = nil
+    	local propFilterName = nil
+    	local propFilterValue = nil
+    	local tagFilter = nil
     	local rawTerm = trimmed
     
     	if string.sub(trimmed, 1, 2) == "c:" then
@@ -1206,7 +1029,7 @@ __modules["SearchEngine"] = function()
     			end
     		elseif propFilterName then
     			local ok, val = pcall(function()
-    				return (inst :: any)[propFilterName :: string]
+    				return (inst )[propFilterName ]
     			end)
     			if ok and val ~= nil then
     				if propFilterValue then
@@ -1246,23 +1069,11 @@ __modules["VirtualList"] = function()
     local Icons = __require("Icons")
     local TreeState = __require("TreeState")
     
-    export type VirtualList = {
-    	ScrollingFrame: ScrollingFrame,
-    	TreeState: TreeState.TreeState,
-    	RowPool: { Frame },
-    	VisibleRowCount: number,
-    	RowHeight: number,
-    	RenderedNodes: { TreeState.Node },
-    	
-    	UpdateData: (self: VirtualList, nodes: { TreeState.Node }) -> (),
-    	UpdateView: (self: VirtualList) -> (),
-    	Destroy: (self: VirtualList) -> (),
-    }
     
     local VirtualList = {}
     VirtualList.__index = VirtualList
     
-    function VirtualList.new(parentFrame: Frame, treeState: TreeState.TreeState): VirtualList
+    function VirtualList.new(parentFrame, treeState)
     	local scroll = Instance.new("ScrollingFrame")
     	scroll.Name = "TreeScroll"
     	scroll.Size = UDim2.new(1, 0, 1, -40)
@@ -1280,7 +1091,7 @@ __modules["VirtualList"] = function()
     		visibleRows = 35
     	end
     
-    	local pool: { Frame } = {}
+    	local pool = {}
     
     	local self = setmetatable({
     		ScrollingFrame = scroll,
@@ -1351,10 +1162,10 @@ __modules["VirtualList"] = function()
     		self:UpdateView()
     	end)
     
-    	return (self :: any) :: VirtualList
+    	return self
     end
     
-    function VirtualList:UpdateData(nodes: { TreeState.Node })
+    function VirtualList:UpdateData(nodes)
     	self.RenderedNodes = nodes
     	local totalHeight = #nodes * self.RowHeight
     	self.ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, totalHeight)
@@ -1383,10 +1194,10 @@ __modules["VirtualList"] = function()
     			row.BackgroundColor3 = isSelected and Theme.BgSelected or Theme.BgHover
     
     			local indent = node.Depth * 16
-    			local arrow = row:FindFirstChild("Arrow") :: TextButton?
-    			local icon = row:FindFirstChild("Icon") :: ImageLabel?
-    			local nameLabel = row:FindFirstChild("ItemName") :: TextLabel?
-    			local rowBtn = row:FindFirstChild("RowBtn") :: TextButton?
+    			local arrow = row:FindFirstChild("Arrow") 
+    			local icon = row:FindFirstChild("Icon") 
+    			local nameLabel = row:FindFirstChild("ItemName") 
+    			local rowBtn = row:FindFirstChild("RowBtn") 
     
     			if arrow then
     				arrow.Position = UDim2.new(0, indent + 4, 0.5, -8)
@@ -1439,18 +1250,11 @@ __modules["PropertiesView"] = function()
     local ReflectionEngine = __require("ReflectionEngine")
     local Serializers = __require("Serializers")
     
-    export type PropertiesView = {
-    	Container: Frame,
-    	CurrentTarget: Instance?,
-    	SetTarget: (self: PropertiesView, inst: Instance?) -> (),
-    	Refresh: (self: PropertiesView) -> (),
-    	Destroy: (self: PropertiesView) -> (),
-    }
     
     local PropertiesView = {}
     PropertiesView.__index = PropertiesView
     
-    function PropertiesView.new(parentFrame: Frame): PropertiesView
+    function PropertiesView.new(parentFrame)
     	local container = Instance.new("Frame")
     	container.Name = "PropertiesContainer"
     	container.Size = UDim2.fromScale(1, 1)
@@ -1506,10 +1310,10 @@ __modules["PropertiesView"] = function()
     		self:Refresh()
     	end)
     
-    	return (self :: any) :: PropertiesView
+    	return self
     end
     
-    function PropertiesView:SetTarget(inst: Instance?)
+    function PropertiesView:SetTarget(inst)
     	self.CurrentTarget = inst
     	self:Refresh()
     end
@@ -1543,12 +1347,9 @@ __modules["PropertiesView"] = function()
     	local rowOrder = 1
     
     	for _, prop in ipairs(props) do
-    		if filter ~= "" and not string.find(string.lower(prop.Name), filter, 1, true) then
-    			continue
-    		end
-    
-    		-- Category header
-    		if prop.Category ~= currentCategory then
+    		if filter == "" or string.find(string.lower(prop.Name), filter, 1, true) then
+    			-- Category header
+    			if prop.Category ~= currentCategory then
     			currentCategory = prop.Category
     			local catHeader = Instance.new("Frame")
     			catHeader.Name = "Cat_" .. currentCategory
@@ -1556,7 +1357,7 @@ __modules["PropertiesView"] = function()
     			catHeader.BackgroundColor3 = Theme.BgElevated
     			catHeader.BorderSizePixel = 0
     			catHeader.LayoutOrder = rowOrder
-    			rowOrder += 1
+    			rowOrder = rowOrder + 1
     			catHeader.Parent = scroll
     
     			local catLabel = Instance.new("TextLabel")
@@ -1578,7 +1379,7 @@ __modules["PropertiesView"] = function()
     		row.BackgroundColor3 = Theme.BgSurface
     		row.BorderSizePixel = 0
     		row.LayoutOrder = rowOrder
-    		rowOrder += 1
+    		rowOrder = rowOrder + 1
     		row.Parent = scroll
     
     		-- Name
@@ -1622,7 +1423,7 @@ __modules["PropertiesView"] = function()
     						task.delay(1, function()
     							valBox.TextColor3 = Theme.TextPrimary
     							local currentVal = pcall(function()
-    								return (target :: any)[prop.Name]
+    								return (target )[prop.Name]
     							end)
     							valBox.Text = Serializers.FormatValue(currentVal, prop.Type)
     						end)
@@ -1634,6 +1435,7 @@ __modules["PropertiesView"] = function()
     					end
     				end
     			end)
+    		end
     		end
     	end
     end
@@ -1653,28 +1455,12 @@ __modules["RemoteSpy"] = function()
     local Theme = __require("Theme")
     local Serializers = __require("Serializers")
     
-    export type LogEntry = {
-    	Id: number,
-    	Time: string,
-    	Remote: Instance,
-    	Type: string,
-    	Args: { any },
-    }
     
-    export type RemoteSpy = {
-    	Container: Frame,
-    	Logs: { LogEntry },
-    	IsActive: boolean,
-    	Start: (self: RemoteSpy) -> (),
-    	Stop: (self: RemoteSpy) -> (),
-    	Clear: (self: RemoteSpy) -> (),
-    	Destroy: (self: RemoteSpy) -> (),
-    }
     
     local RemoteSpy = {}
     RemoteSpy.__index = RemoteSpy
     
-    function RemoteSpy.new(parentFrame: Frame): RemoteSpy
+    function RemoteSpy.new(parentFrame)
     	local container = Instance.new("Frame")
     	container.Name = "RemoteSpyContainer"
     	container.Size = UDim2.fromScale(1, 1)
@@ -1742,7 +1528,7 @@ __modules["RemoteSpy"] = function()
     
     	local self = setmetatable({
     		Container = container,
-    		Logs = {} :: { LogEntry },
+    		Logs = {},
     		IsActive = true,
     		_scroll = logScroll,
     		_toggleBtn = toggleBtn,
@@ -1764,15 +1550,15 @@ __modules["RemoteSpy"] = function()
     	-- Automatically attach network hooks
     	self:HookNetwork()
     
-    	return (self :: any) :: RemoteSpy
+    	return self
     end
     
     function RemoteSpy:HookNetwork()
-    	local hookmetamethod = (rawget(getfenv(), "hookmetamethod") :: any)
-    	local checkcaller = (rawget(getfenv(), "checkcaller") :: any)
+    	local hookmetamethod = (rawget(getfenv(), "hookmetamethod") )
+    	local checkcaller = (rawget(getfenv(), "checkcaller") )
     
     	if typeof(hookmetamethod) == "function" and typeof(checkcaller) == "function" then
-    		local oldNamecall: any
+    		local oldNamecall
     		oldNamecall = hookmetamethod(game, "__namecall", function(selfRemote, ...)
     			local method = getnamecallmethod()
     			if not checkcaller() and (method == "FireServer" or method == "InvokeServer") then
@@ -1788,13 +1574,13 @@ __modules["RemoteSpy"] = function()
     	end
     end
     
-    function RemoteSpy:AddLog(remote: Instance, method: string, args: { any })
+    function RemoteSpy:AddLog(remote, method, args)
     	if not self.IsActive then
     		return
     	end
     
-    	self._counter += 1
-    	local entry: LogEntry = {
+    	self._counter = self._counter + 1
+    	local entry = {
     		Id = self._counter,
     		Time = os.date("%X"),
     		Remote = remote,
@@ -1845,7 +1631,7 @@ __modules["RemoteSpy"] = function()
     
     	copyBtn.MouseButton1Click:Connect(function()
     		local code = self:GenerateScript(remote, method, args)
-    		local setclipboard = (rawget(getfenv(), "setclipboard") :: any)
+    		local setclipboard = (rawget(getfenv(), "setclipboard") )
     		if typeof(setclipboard) == "function" then
     			setclipboard(code)
     			copyBtn.Text = "Copied!"
@@ -1856,7 +1642,7 @@ __modules["RemoteSpy"] = function()
     	end)
     end
     
-    function RemoteSpy:GenerateScript(remote: Instance, method: string, args: { any }): string
+    function RemoteSpy:GenerateScript(remote, method, args)
     	local fullPath = remote:GetFullName()
     	local formattedArgs = {}
     	for _, arg in ipairs(args) do
@@ -1900,16 +1686,11 @@ __modules["ScriptViewer"] = function()
     
     local Theme = __require("Theme")
     
-    export type ScriptViewer = {
-    	Container: Frame,
-    	ViewScript: (self: ScriptViewer, scriptInst: Instance) -> (),
-    	Destroy: (self: ScriptViewer) -> (),
-    }
     
     local ScriptViewer = {}
     ScriptViewer.__index = ScriptViewer
     
-    function ScriptViewer.new(parentFrame: Frame): ScriptViewer
+    function ScriptViewer.new(parentFrame)
     	local container = Instance.new("Frame")
     	container.Name = "ScriptViewerContainer"
     	container.Size = UDim2.fromScale(1, 1)
@@ -1986,7 +1767,7 @@ __modules["ScriptViewer"] = function()
     	}, ScriptViewer)
     
     	copyBtn.MouseButton1Click:Connect(function()
-    		local setclipboard = (rawget(getfenv(), "setclipboard") :: any)
+    		local setclipboard = (rawget(getfenv(), "setclipboard") )
     		if typeof(setclipboard) == "function" and self._currentCode ~= "" then
     			setclipboard(self._currentCode)
     			copyBtn.Text = "Copied!"
@@ -1996,16 +1777,16 @@ __modules["ScriptViewer"] = function()
     		end
     	end)
     
-    	return (self :: any) :: ScriptViewer
+    	return self
     end
     
-    function ScriptViewer:ViewScript(scriptInst: Instance)
+    function ScriptViewer:ViewScript(scriptInst)
     	self._title.Text = "Viewing: " .. scriptInst.Name .. " [" .. scriptInst.ClassName .. "]"
     	self._codeLabel.Text = "Decompiling / Fetching source, please wait..."
     
     	task.spawn(function()
     		local source = ""
-    		local decompile = (rawget(getfenv(), "decompile") :: any)
+    		local decompile = (rawget(getfenv(), "decompile") )
     
     		if typeof(decompile) == "function" then
     			local ok, res = pcall(decompile, scriptInst)
@@ -2017,7 +1798,7 @@ __modules["ScriptViewer"] = function()
     		else
     			-- Try reading .Source property (works in Studio / privileged environments)
     			local ok, res = pcall(function()
-    				return (scriptInst :: any).Source
+    				return (scriptInst ).Source
     			end)
     			if ok and typeof(res) == "string" then
     				source = res
@@ -2066,16 +1847,11 @@ __modules["NilScanner"] = function()
     local Theme = __require("Theme")
     local Icons = __require("Icons")
     
-    export type NilScanner = {
-    	Container: Frame,
-    	Scan: (self: NilScanner) -> (),
-    	Destroy: (self: NilScanner) -> (),
-    }
     
     local NilScanner = {}
     NilScanner.__index = NilScanner
     
-    function NilScanner.new(parentFrame: Frame): NilScanner
+    function NilScanner.new(parentFrame)
     	local container = Instance.new("Frame")
     	container.Name = "NilScannerContainer"
     	container.Size = UDim2.fromScale(1, 1)
@@ -2136,7 +1912,7 @@ __modules["NilScanner"] = function()
     		self:Scan()
     	end)
     
-    	return (self :: any) :: NilScanner
+    	return self
     end
     
     function NilScanner:Scan()
@@ -2147,8 +1923,8 @@ __modules["NilScanner"] = function()
     		end
     	end
     
-    	local nilList: { Instance } = {}
-    	local getnilinstances = (rawget(getfenv(), "getnilinstances") :: any) or (rawget(getfenv(), "get_nil_instances") :: any)
+    	local nilList = {}
+    	local getnilinstances = (rawget(getfenv(), "getnilinstances") ) or (rawget(getfenv(), "get_nil_instances") )
     
     	if typeof(getnilinstances) == "function" then
     		local ok, res = pcall(getnilinstances)
@@ -2232,19 +2008,11 @@ __modules["CommandPalette"] = function()
     local UserInputService = game:GetService("UserInputService")
     local Theme = __require("Theme")
     
-    export type CommandPalette = {
-    	Container: Frame,
-    	IsOpen: boolean,
-    	Open: (self: CommandPalette) -> (),
-    	Close: (self: CommandPalette) -> (),
-    	Toggle: (self: CommandPalette) -> (),
-    	Destroy: (self: CommandPalette) -> (),
-    }
     
     local CommandPalette = {}
     CommandPalette.__index = CommandPalette
     
-    function CommandPalette.new(parentGui: ScreenGui, onAction: (actionId: string, payload: any?) -> ()): CommandPalette
+    function CommandPalette.new(parentGui, onAction)
     	local overlay = Instance.new("Frame")
     	overlay.Name = "PaletteOverlay"
     	overlay.Size = UDim2.fromScale(1, 1)
@@ -2326,7 +2094,7 @@ __modules["CommandPalette"] = function()
     
     	self:PopulateStandardCommands()
     
-    	return (self :: any) :: CommandPalette
+    	return self
     end
     
     function CommandPalette:PopulateStandardCommands()
@@ -2418,19 +2186,11 @@ __modules["WindowManager"] = function()
     local UserInputService = game:GetService("UserInputService")
     local Theme = __require("Theme")
     
-    export type WindowManager = {
-    	RootWindow: Frame,
-    	ContentArea: Frame,
-    	CurrentTab: string,
-    	SwitchTab: (self: WindowManager, tabId: string) -> (),
-    	ToggleVisibility: (self: WindowManager) -> (),
-    	Destroy: (self: WindowManager) -> (),
-    }
     
     local WindowManager = {}
     WindowManager.__index = WindowManager
     
-    function WindowManager.new(parentGui: ScreenGui, onTabSwitched: (tabId: string) -> ()): WindowManager
+    function WindowManager.new(parentGui, onTabSwitched)
     	local window = Instance.new("Frame")
     	window.Name = "AethelDex_MainWindow"
     	window.Size = UDim2.fromOffset(680, 520)
@@ -2512,14 +2272,14 @@ __modules["WindowManager"] = function()
     		RootWindow = window,
     		ContentArea = contentArea,
     		CurrentTab = "explorer",
-    		_tabButtons = {} :: { [string]: TextButton },
+    		_tabButtons = {},
     		_onTabSwitched = onTabSwitched,
     	}, WindowManager)
     
     	-- Dragging mechanics
     	local dragging = false
-    	local dragStart: Vector2
-    	local startPos: UDim2
+    	local dragStart
+    	local startPos
     
     	titleBar.InputBegan:Connect(function(input)
     		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -2584,10 +2344,10 @@ __modules["WindowManager"] = function()
     		self._tabButtons[def.Id] = btn
     	end
     
-    	return (self :: any) :: WindowManager
+    	return self
     end
     
-    function WindowManager:SwitchTab(tabId: string)
+    function WindowManager:SwitchTab(tabId)
     	self.CurrentTab = tabId
     	for id, btn in pairs(self._tabButtons) do
     		if id == tabId then
@@ -2675,9 +2435,9 @@ __modules["Main"] = function()
     
     	-- 4. Setup Main Window Manager
     	local activeTab = "explorer"
-    	local tabContainers: { [string]: Frame } = {}
+    	local tabContainers = {}
     
-    	local windowMgr: WindowManager.WindowManager
+    	local windowMgr
     	windowMgr = WindowManager.new(host.RootGui, function(tabId)
     		activeTab = tabId
     		for id, container in pairs(tabContainers) do
@@ -2687,7 +2447,7 @@ __modules["Main"] = function()
     	janitor:Add(windowMgr)
     
     	-- 5. Create Tab Views
-    	local function createTabContainer(name: string): Frame
+    	local function createTabContainer(name)
     		local frame = Instance.new("Frame")
     		frame.Name = "TabContent_" .. name
     		frame.Size = UDim2.fromScale(1, 1)

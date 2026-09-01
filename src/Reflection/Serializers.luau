@@ -4,7 +4,7 @@
 
 local Serializers = {}
 
-function Serializers.FormatValue(val: any, valType: string?): string
+function Serializers.FormatValue(val, valType)
 	local t = valType or typeof(val)
 
 	if val == nil then
@@ -48,7 +48,7 @@ function Serializers.FormatValue(val: any, valType: string?): string
 	end
 end
 
-function Serializers.ParseValue(inputStr: string, targetType: string): (boolean, any)
+function Serializers.ParseValue(inputStr, targetType)
 	if targetType == "string" then
 		return true, inputStr
 	elseif targetType == "number" then

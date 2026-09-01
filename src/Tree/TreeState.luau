@@ -35,24 +35,24 @@ export type TreeState = {
 local TreeState = {}
 TreeState.__index = TreeState
 
-function TreeState.new(): TreeState
+function TreeState.new()
 	local self = setmetatable({
-		RootNodes = {} :: { Node },
-		NodeMap = {} :: { [Instance]: Node },
-		FlattenedList = {} :: { Node },
-		SelectedInstances = {} :: { [Instance]: boolean },
-		SelectionList = {} :: { Instance },
+		RootNodes = {},
+		NodeMap = {},
+		FlattenedList = {},
+		SelectedInstances = {},
+		SelectionList = {},
 
 		OnSelectionChanged = Signal.new(),
 		OnTreeStructureChanged = Signal.new(),
 	}, TreeState)
 
-	return (self :: any) :: TreeState
+	return self
 end
 
-function TreeState:CreateNode(inst: Instance, depth: number, parentNode: Node?): Node
+function TreeState:CreateNode(inst, depth, parentNode)
 	local hasKids = #inst:GetChildren() > 0
-	local node: Node = {
+	local node = {
 		Instance = inst,
 		Depth = depth,
 		Expanded = false,
@@ -64,7 +64,7 @@ function TreeState:CreateNode(inst: Instance, depth: number, parentNode: Node?):
 	return node
 end
 
-function TreeState:AddRootService(service: Instance)
+function TreeState:AddRootService(service)
 	if self.NodeMap[service] then
 		return
 	end
@@ -73,7 +73,7 @@ function TreeState:AddRootService(service: Instance)
 	self:RebuildFlattened()
 end
 
-function TreeState:PopulateChildren(node: Node)
+function TreeState:PopulateChildren(node)
 	local children = node.Instance:GetChildren()
 	node.HasChildren = #children > 0
 	table.clear(node.Children)
@@ -90,11 +90,11 @@ function TreeState:PopulateChildren(node: Node)
 	end
 end
 
-function TreeState:ToggleExpand(node: Node)
+function TreeState:ToggleExpand(node)
 	self:SetExpanded(node, not node.Expanded)
 end
 
-function TreeState:SetExpanded(node: Node, expanded: boolean)
+function TreeState:SetExpanded(node, expanded)
 	if node.Expanded == expanded then
 		return
 	end
@@ -108,7 +108,7 @@ function TreeState:SetExpanded(node: Node, expanded: boolean)
 	self.OnTreeStructureChanged:Fire()
 end
 
-local function flattenRecursive(node: Node, output: { Node })
+local function flattenRecursive(node, output)
 	table.insert(output, node)
 	if node.Expanded then
 		for _, child in ipairs(node.Children) do
@@ -124,7 +124,7 @@ function TreeState:RebuildFlattened()
 	end
 end
 
-function TreeState:Select(inst: Instance, isMulti: boolean?)
+function TreeState:Select(inst, isMulti)
 	if not isMulti then
 		table.clear(self.SelectedInstances)
 		table.clear(self.SelectionList)
@@ -138,7 +138,7 @@ function TreeState:Select(inst: Instance, isMulti: boolean?)
 	self.OnSelectionChanged:Fire(self.SelectionList)
 end
 
-function TreeState:Deselect(inst: Instance)
+function TreeState:Deselect(inst)
 	if self.SelectedInstances[inst] then
 		self.SelectedInstances[inst] = nil
 		for i, selected in ipairs(self.SelectionList) do

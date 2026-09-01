@@ -23,7 +23,7 @@ export type VirtualList = {
 local VirtualList = {}
 VirtualList.__index = VirtualList
 
-function VirtualList.new(parentFrame: Frame, treeState: TreeState.TreeState): VirtualList
+function VirtualList.new(parentFrame, treeState)
 	local scroll = Instance.new("ScrollingFrame")
 	scroll.Name = "TreeScroll"
 	scroll.Size = UDim2.new(1, 0, 1, -40)
@@ -41,7 +41,7 @@ function VirtualList.new(parentFrame: Frame, treeState: TreeState.TreeState): Vi
 		visibleRows = 35
 	end
 
-	local pool: { Frame } = {}
+	local pool = {}
 
 	local self = setmetatable({
 		ScrollingFrame = scroll,
@@ -112,10 +112,10 @@ function VirtualList.new(parentFrame: Frame, treeState: TreeState.TreeState): Vi
 		self:UpdateView()
 	end)
 
-	return (self :: any) :: VirtualList
+	return self
 end
 
-function VirtualList:UpdateData(nodes: { TreeState.Node })
+function VirtualList:UpdateData(nodes)
 	self.RenderedNodes = nodes
 	local totalHeight = #nodes * self.RowHeight
 	self.ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, totalHeight)
@@ -144,10 +144,10 @@ function VirtualList:UpdateView()
 			row.BackgroundColor3 = isSelected and Theme.BgSelected or Theme.BgHover
 
 			local indent = node.Depth * 16
-			local arrow = row:FindFirstChild("Arrow") :: TextButton?
-			local icon = row:FindFirstChild("Icon") :: ImageLabel?
-			local nameLabel = row:FindFirstChild("ItemName") :: TextLabel?
-			local rowBtn = row:FindFirstChild("RowBtn") :: TextButton?
+			local arrow = row:FindFirstChild("Arrow") 
+			local icon = row:FindFirstChild("Icon") 
+			local nameLabel = row:FindFirstChild("ItemName") 
+			local rowBtn = row:FindFirstChild("RowBtn") 
 
 			if arrow then
 				arrow.Position = UDim2.new(0, indent + 4, 0.5, -8)
