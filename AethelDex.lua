@@ -1994,6 +1994,30 @@ function f.rightClick()
 		rightClickContext:Hide()
 	end})
 	
+
+	-- Scripts
+	local foundScript = nil
+	for _, v in pairs(selection.List) do
+		local isScript = false
+		pcall(function() isScript = v:IsA("LuaSourceContainer") end)
+		if isScript then
+			foundScript = v
+			break
+		end
+	end
+	
+	if foundScript then
+		rightClickContext:AddDivider()
+		rightClickContext:Add({Name = "View Script", Icon = "", DisabledIcon = "", Shortcut = "", Disabled = false, OnClick = function()
+			f.viewScript(foundScript)
+			rightClickContext:Hide()
+		end})
+		rightClickContext:Add({Name = "Save Script", Icon = "", DisabledIcon = "", Shortcut = "", Disabled = false, OnClick = function()
+			f.saveScript(foundScript)
+			rightClickContext:Hide()
+		end})
+	end
+
 	-- Parts
 	if f.tabIsA(selection.List, "BasePart") or f.tabIsA(selection.List, "Model") then
 		rightClickContext:AddDivider()
@@ -2041,6 +2065,192 @@ function f.rightClick()
 	rightClickContext:Show(gui,mouse.X,mouse.Y)
 end
 
+
+local scriptViewerWindow = nil
+local scriptViewerBox = nil
+local scriptViewerTitle = nil
+local currentScript = nil
+
+function f.saveScript(scriptInst)
+	if not scriptInst then return end
+	local source = ""
+	local decompile = (rawget(getfenv(), "decompile"))
+	if type(decompile) == "function" then
+		local ok, res = pcall(decompile, scriptInst)
+		if ok and type(res) == "string" then
+			source = res
+		end
+	end
+	if source == "" then
+		pcall(function() source = scriptInst.Source end)
+	end
+	pcall(function()
+		local writefile = (rawget(getfenv(), "writefile"))
+		if type(writefile) == "function" then
+			local filename = scriptInst.Name:gsub("[^%w_%-]", "_") .. "_" .. scriptInst.ClassName .. ".lua"
+			writefile(filename, source)
+		end
+	end)
+end
+
+function f.viewScript(scriptInst)
+	if not scriptInst then return end
+	currentScript = scriptInst
+	
+	if not scriptViewerWindow then
+		scriptViewerWindow = Instance.new("Frame")
+		scriptViewerWindow.Name = "ScriptViewer"
+		scriptViewerWindow.Size = UDim2.new(0, 600, 0, 450)
+		scriptViewerWindow.Position = UDim2.new(0.5, -300, 0.5, -225)
+		scriptViewerWindow.BackgroundColor3 = Color3.fromRGB(36, 36, 36)
+		scriptViewerWindow.BorderSizePixel = 1
+		scriptViewerWindow.BorderColor3 = Color3.fromRGB(60, 60, 60)
+		scriptViewerWindow.Active = true
+		scriptViewerWindow.Draggable = true
+		scriptViewerWindow.ZIndex = 50
+		scriptViewerWindow.Parent = gui
+
+		local topBar = Instance.new("Frame")
+		topBar.Name = "TopBar"
+		topBar.Size = UDim2.new(1, 0, 0, 28)
+		topBar.BackgroundColor3 = Color3.fromRGB(48, 48, 48)
+		topBar.BorderSizePixel = 0
+		topBar.ZIndex = 51
+		topBar.Parent = scriptViewerWindow
+
+		scriptViewerTitle = Instance.new("TextLabel")
+		scriptViewerTitle.Name = "Title"
+		scriptViewerTitle.Size = UDim2.new(1, -180, 1, 0)
+		scriptViewerTitle.Position = UDim2.new(0, 10, 0, 0)
+		scriptViewerTitle.BackgroundTransparency = 1
+		scriptViewerTitle.TextColor3 = Color3.fromRGB(220, 220, 220)
+		scriptViewerTitle.TextSize = 13
+		scriptViewerTitle.Font = Enum.Font.SourceSansBold
+		scriptViewerTitle.TextXAlignment = Enum.TextXAlignment.Left
+		scriptViewerTitle.ZIndex = 52
+		scriptViewerTitle.Parent = topBar
+
+		local closeBtn = Instance.new("TextButton")
+		closeBtn.Name = "Close"
+		closeBtn.Size = UDim2.new(0, 28, 0, 28)
+		closeBtn.Position = UDim2.new(1, -28, 0, 0)
+		closeBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+		closeBtn.BorderSizePixel = 0
+		closeBtn.Text = "X"
+		closeBtn.TextColor3 = Color3.new(1, 1, 1)
+		closeBtn.TextSize = 13
+		closeBtn.Font = Enum.Font.SourceSansBold
+		closeBtn.ZIndex = 52
+		closeBtn.Parent = topBar
+		closeBtn.MouseButton1Click:Connect(function()
+			scriptViewerWindow.Visible = false
+		end)
+
+		local copyBtn = Instance.new("TextButton")
+		copyBtn.Name = "Copy"
+		copyBtn.Size = UDim2.new(0, 70, 0, 22)
+		copyBtn.Position = UDim2.new(1, -170, 0, 3)
+		copyBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+		copyBtn.BorderSizePixel = 0
+		copyBtn.Text = "Copy Code"
+		copyBtn.TextColor3 = Color3.fromRGB(240, 240, 240)
+		copyBtn.TextSize = 12
+		copyBtn.Font = Enum.Font.SourceSans
+		copyBtn.ZIndex = 52
+		copyBtn.Parent = topBar
+		copyBtn.MouseButton1Click:Connect(function()
+			if scriptViewerBox then
+				pcall(function()
+					local setclipboard = (rawget(getfenv(), "setclipboard") or rawget(getfenv(), "toclipboard"))
+					if type(setclipboard) == "function" then
+						setclipboard(scriptViewerBox.Text)
+					end
+				end)
+				copyBtn.Text = "Copied!"
+				task.delay(1, function() copyBtn.Text = "Copy Code" end)
+			end
+		end)
+
+		local saveBtn = Instance.new("TextButton")
+		saveBtn.Name = "Save"
+		saveBtn.Size = UDim2.new(0, 60, 0, 22)
+		saveBtn.Position = UDim2.new(1, -95, 0, 3)
+		saveBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+		saveBtn.BorderSizePixel = 0
+		saveBtn.Text = "Save File"
+		saveBtn.TextColor3 = Color3.fromRGB(240, 240, 240)
+		saveBtn.TextSize = 12
+		saveBtn.Font = Enum.Font.SourceSans
+		saveBtn.ZIndex = 52
+		saveBtn.Parent = topBar
+		saveBtn.MouseButton1Click:Connect(function()
+			if currentScript then
+				f.saveScript(currentScript)
+				saveBtn.Text = "Saved!"
+				task.delay(1, function() saveBtn.Text = "Save File" end)
+			end
+		end)
+
+		local scroll = Instance.new("ScrollingFrame")
+		scroll.Name = "CodeScroll"
+		scroll.Size = UDim2.new(1, -8, 1, -36)
+		scroll.Position = UDim2.new(0, 4, 0, 32)
+		scroll.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+		scroll.BorderSizePixel = 0
+		scroll.ScrollBarThickness = 8
+		scroll.CanvasSize = UDim2.new(0, 0, 0, 1000)
+		scroll.ZIndex = 51
+		scroll.Parent = scriptViewerWindow
+
+		scriptViewerBox = Instance.new("TextBox")
+		scriptViewerBox.Name = "CodeText"
+		scriptViewerBox.Size = UDim2.new(1, -10, 1, 0)
+		scriptViewerBox.Position = UDim2.new(0, 5, 0, 0)
+		scriptViewerBox.BackgroundTransparency = 1
+		scriptViewerBox.TextColor3 = Color3.fromRGB(220, 220, 220)
+		scriptViewerBox.TextSize = 13
+		scriptViewerBox.Font = Enum.Font.Code
+		scriptViewerBox.TextXAlignment = Enum.TextXAlignment.Left
+		scriptViewerBox.TextYAlignment = Enum.TextYAlignment.Top
+		scriptViewerBox.ClearTextOnFocus = false
+		scriptViewerBox.MultiLine = true
+		scriptViewerBox.TextEditable = false
+		scriptViewerBox.ZIndex = 52
+		scriptViewerBox.Parent = scroll
+	end
+
+	scriptViewerTitle.Text = "Viewing: " .. scriptInst.Name .. " [" .. scriptInst.ClassName .. "]"
+	scriptViewerBox.Text = "-- Decompiling script, please wait..."
+	scriptViewerWindow.Visible = true
+
+	task.spawn(function()
+		local source = ""
+		local decompile = (rawget(getfenv(), "decompile"))
+		if type(decompile) == "function" then
+			local ok, res = pcall(decompile, scriptInst)
+			if ok and type(res) == "string" then
+				source = res
+			else
+				source = "-- [Decompile Failed]: " .. tostring(res)
+			end
+		else
+			local ok, res = pcall(function() return scriptInst.Source end)
+			if ok and type(res) == "string" and res ~= "" then
+				source = res
+			else
+				source = "-- [Notice]: decompile() is not supported by your executor, and script.Source is protected in live games."
+			end
+		end
+
+		scriptViewerBox.Text = source
+		local lines = select(2, string.gsub(source, "\n", "\n")) + 1
+		local scroll = scriptViewerBox.Parent
+		if scroll and scroll:IsA("ScrollingFrame") then
+			scroll.CanvasSize = UDim2.new(0, 0, 0, lines * 16 + 40)
+		end
+	end)
+end
+
 function f.newExplorer()
 	local newgui = getResource("ExplorerPanel")
 	local explorerScroll = ScrollBar.new()
@@ -2081,7 +2291,13 @@ function f.newExplorer()
 			if not node then return end
 			local now = os.clock()
 			if node._lastClick and (now - node._lastClick) < 0.35 then
-				self:Expand(node)
+				local isScript = false
+				pcall(function() isScript = node.Obj and node.Obj:IsA("LuaSourceContainer") end)
+				if isScript then
+					f.viewScript(node.Obj)
+				else
+					self:Expand(node)
+				end
 			end
 			node._lastClick = now
 			if Services.UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
