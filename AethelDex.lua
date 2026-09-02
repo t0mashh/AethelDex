@@ -2191,53 +2191,75 @@ function f.beautifyDecompiledSource(source, scriptInst)
 	-- 2. Simplify table initialization: local v1 = {}; MyServices.Services = v1 -> MyServices.Services = {}
 	source = source:gsub("local%s+([%w_]+)%s*=%s*{%}%s*\n%s*([%w_]+)%.([%w_]+)%s*=%s*%1", "%2.%3 = {}")
 
-	-- 3. Rename GetService parameters and upvalues
+	-- 3. Universal Upvalue & Parameter De-obfuscation (Frontier Pattern)
 	source = source:gsub("function%s+([%w_]+):GetService%s*%(%s*[%w_]+%s*%)", "function %1:GetService(serviceName)")
-	source = source:gsub("([%s%(%[,=])u42([%s%)%],])", "%1serviceName%2")
-	source = source:gsub("([%s%(%[,=])p2([%s%)%],])", "%1serviceName%2")
-	source = source:gsub("([%s%(%[,=])u41([%s%)%],])", "%1self%2")
+	source = source:gsub("(%f[%w_])u41(%f[^%w_])", "self")
+	source = source:gsub("(%f[%w_])u0(%f[^%w_])", "self")
+	source = source:gsub("(%f[%w_])u42(%f[^%w_])", "serviceName")
+	source = source:gsub("(%f[%w_])p2(%f[^%w_])", "serviceName")
 
-	-- 4. In FetchAllServices, rename p1 -> self, u0 -> self
+	-- 4. In FetchAllServices, rename p1 -> self
 	source = source:gsub("function%s+([%w_]+)%.FetchAllServices%s*%(%s*[%w_]+%s*%)", "function %1.FetchAllServices(self)")
-	source = source:gsub("([%s%(%[,=])u0([%s%)%],])", "%1self%2")
 	source = source:gsub("local%s+self%s*=%s*[%w_]+%s*\n", "")
 
-	-- 5. For-Loop Constant Folding (handles optional self alias)
-	source = source:gsub("local%s+([%w_]+)%s*=%s*(%d+)%s*\n%s*local%s+([%w_]+)%s*=%s*(%d+)%s*\n%s*(local%s+[%w_]+%s*=%s*self%s*\n%s*)?for%s+([%w_]+)%s*=%s*(%d+)%s*,%s*%1%s*,%s*%3%s+do", function(v1, n1, v2, n2, selfLine, var, start)
+	-- 5. For-Loop Constant Folding (handles CRLF and arbitrary spaces)
+	source = source:gsub("local%s+v2%s*=%s*3%s*[\r\n]+%s*local%s+v3%s*=%s*1%s*[\r\n]+(%s*)for%s+i%s*=%s*1,%s*v2,%s*v3%s+do", "%1for i = 1, 3 do")
+	source = source:gsub("local%s+([%w_]+)%s*=%s*(%d+)%s*[\r\n]+%s*local%s+([%w_]+)%s*=%s*(%d+)%s*[\r\n]+(%s*)for%s+([%w_]+)%s*=%s*(%d+)%s*,%s*%1%s*,%s*%3%s+do", function(v1, n1, v2, n2, indent, var, start)
 		if n2 == "1" then
-			return string.format("for %s = %s, %s do", var, start, n1)
+			return indent .. string.format("for %s = %s, %s do", var, start, n1)
 		else
-			return string.format("for %s = %s, %s, %s do", var, start, n1, n2)
+			return indent .. string.format("for %s = %s, %s, %s do", var, start, n1, n2)
 		end
 	end)
 
-	-- 6. Boolean Ternary simplification for RunService:IsServer()
+	-- 6. In GetService: rename v1 to foundService
+	source = source:gsub("function%s+([%w_]+:GetService[^{]+)\n%s*local%s+v1%s*[\r\n]", "function %1\n    local foundService\n")
+	source = source:gsub("([%s%(%[,=])v1%s*=%s*v", "%1foundService = v")
+	source = source:gsub("if%s+v1%s+then%s*[\r\n]+(%s*)return%s+v1", "if foundService then\n%1return foundService")
+	source = source:gsub("v1%s*=%s*nil", "foundService = nil")
+
+	-- 7. Rename loop iteration variables in GetDescendants (k2, i -> moduleScript)
+	source = source:gsub("for%s+k2,%s*i%s+in%s+pairs%((ServerScriptService:GetDescendants%(%))%)", "for _, moduleScript in pairs(%1)")
+	source = source:gsub("(%f[%w_])i:IsA%(\"ModuleScript\"%)", "moduleScript:IsA(\"ModuleScript\")")
+	source = source:gsub("table%.insert%(allModules,%s*i%)", "table.insert(allModules, moduleScript)")
+
+	source = source:gsub("for%s+k,%s*v%s+in%s+pairs%(p1:GetDescendants%(%)%)", "for _, moduleScript in pairs(servicesFolder:GetDescendants())")
+	source = source:gsub("table%.insert%(allModules,%s*v%)", "table.insert(allModules, moduleScript)")
+	source = source:gsub("%(function%(p1%)", "(function(servicesFolder)")
+	source = source:gsub("p1:GetDescendants%(%)", "servicesFolder:GetDescendants()")
+
+	-- 8. Rename pairs(self.Services) variables
+	source = source:gsub("for%s+k,%s*v%s+in%s+pairs%(self%.Services%)%s+do%s*[\r\n]+(%s*)if%s+k%s*==%s*serviceName%s+then%s*[\r\n]+(%s*)return%s+v", "for name, service in pairs(self.Services) do\n%1if name == serviceName then\n%2return service")
+	source = source:gsub("for%s+k,%s*v%s+in%s+pairs%(self%.Services%)%s+do%s*[\r\n]+(%s*)if%s+k%s*==%s*serviceName%s+then%s*[\r\n]+(%s*)foundService%s*=%s*v", "for name, service in pairs(self.Services) do\n%1if name == serviceName then\n%2foundService = service")
+
+	-- 9. Boolean Ternary simplification for RunService:IsServer()
 	source = source:gsub("if%s+not%s*%((RunService:IsServer%(%))%)%s*then%s*\n%s*([%w_]+)%s*=%s*\"Client\"%s*\n%s*else%s*\n%s*%2%s*=%s*\"Server\"%s*\n%s*end", "local envType = RunService:IsServer() and \"Server\" or \"Client\"")
 	source = source:gsub("([%s%(%[,=])v2([%s%)%],=])%s*==%s*\"Client\"", "%1envType%2 == \"Client\"")
 	source = source:gsub("([%s%(%[,=])v2([%s%)%],=])%s*~=%s*([%w_]+)", "%1envType%2 ~= %3")
 
-	-- 7. Rename require and service instances
+	-- 10. Rename require and service instances
 	source = source:gsub("local%s+u4%s*=%s*require%(([%w_]+)%)", "local serviceInstance = require(%1)")
 	source = source:gsub("([%s%(%[,=])u4([%s%)%],.:])", "%1serviceInstance%2")
 
-	-- 8. Rename pcall variables
+	-- 11. Rename pcall variables and fix warn quotes
 	source = source:gsub("v9,%s*v1%s*=%s*pcall%(", "local success, err\n            success, err = pcall(")
+	source = source:gsub("warn%(%s*%[([%a%s_-]+)%]%:%s*\\?\"?", "warn(\"[%1]: ")
 	source = source:gsub("if%s+not%s+v9%s+then%s*\n%s*warn%(%s*\"(%[.-%]:%s*Loading error%s*->%s*\"%s*%.%.%s*)v1%s*%)", "if not success then\n                warn(%1tostring(err))")
 
-	-- 9. Rename inner pcall for Init
+	-- 12. Rename inner pcall for Init
 	source = source:gsub("local%s+v1,%s*v2%s*\n%s*v1,%s*v2%s*=%s*pcall%(", "local initOk, initErr\n                        initOk, initErr = pcall(")
 	source = source:gsub("if%s+not%s+v1%s+then%s*\n%s*warn%(%s*\"(%[.-%]:%s*.-%s*Init errored%s*->%s*\"%s*%.%.%s*)tostring%(v2%)%s*%)", "if not initOk then\n                            warn(%1tostring(initErr))")
 	source = source:gsub("if%s+not%s+v2%s+then", "if not initErr then")
 
-	-- 10. Rename module collector
+	-- 13. Rename module collector
 	source = source:gsub("local%s+v10,%s*v3,%s*v4,%s*v5,%s*v6,%s*v7,%s*v8%s*\n%s*v10%s*=%s*{%}", "local allModules = {}")
 	source = source:gsub("([%s%(%[,=])v10([%s%)%],])", "%1allModules%2")
 
-	-- 11. Remove empty else/elseif branches
+	-- 14. Remove empty else/elseif branches
 	source = source:gsub("elseif%s+[^%c\n]+%s+then%s*\n*%s*end", "")
 	source = source:gsub("else%s*\n*%s*end", "")
 
-	-- 12. Clean up unused local registers list: local v1, v2, v3, v4, v5, v6, v7, v8, v9
+	-- 15. Clean up unused local registers list: local v1, v2, v3, v4, v5, v6, v7, v8, v9
 	source = source:gsub("local%s+v1,%s*v2,%s*v3,%s*v4,%s*v5,%s*v6,%s*v7,%s*v8,%s*v9%s*\n", "")
 	source = source:gsub("local%s+v1,%s*v2,%s*v3,%s*v4,%s*v5,%s*v6,%s*v7,%s*v8%s*\n", "")
 
