@@ -1616,6 +1616,8 @@ function f.savePlace(options)
 			isSavingPlace = false
 			updateProgress(msg, pct, pth)
 		end
+
+		local saveOk, saveErr = pcall(function()
 		-- Background native .rbxl save
 		if nativeSave and type(nativeSaveInstance) == "function" then
 			updateProgress("Saving place (.rbxl) in background...", 0.05)
@@ -1796,6 +1798,11 @@ function f.savePlace(options)
 			finish("⚠️ No writefile()! Remotes copied to clipboard.", 1.0, rootDir)
 		else
 			finish("✅ Done! Saved to workspace/" .. rootDir, 1.0, rootDir)
+		end
+		end)
+		if not saveOk then
+			finish("❌ Error: " .. tostring(saveErr), 1.0)
+			warn("[AethelDex SavePlace Crash]: " .. tostring(saveErr))
 		end
 	end)
 end

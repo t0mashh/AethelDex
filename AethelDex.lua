@@ -1846,12 +1846,30 @@ function f.hookWindowListener(window)
 		window.TopBar.Close.BackgroundTransparency = 1
 	end)
 	
-	window.TopBar.Close.MouseButton1Click:Connect(function()
+		window.TopBar.Close.MouseButton1Click:connect(function()
 		if f.checkInPane(window) then f.removeFromPane(window) window.Visible = false return end
 		window.Content:TweenSize(UDim2.new(1,-4,0,0),Enum.EasingDirection.Out,Enum.EasingStyle.Quad,0.4,true)
 		task.wait(0.4)
 		window.Visible = false
 	end)
+
+	local savePlaceBtn = window.TopBar:FindFirstChild("SavePlaceBtn")
+	if savePlaceBtn then
+		savePlaceBtn.MouseButton1Click:Connect(function()
+			savePlaceBtn.Text = "Saving..."
+			task.spawn(function()
+				local ok, err = pcall(function()
+					f.savePlace({mode = "full", decompile = true, native = true})
+				end)
+				if not ok then
+					warn("[AethelDex SavePlace Error]: " .. tostring(err))
+				end
+				task.delay(2, function()
+					pcall(function() savePlaceBtn.Text = "💾 Save Place" end)
+				end)
+			end)
+		end)
+	end
 end
 
 -- Explorer Functions
@@ -2032,6 +2050,23 @@ function f.rightClick()
 		end})
 		rightClickContext:Add({Name = "Save Script", Icon = "", DisabledIcon = "", Shortcut = "", Disabled = false, OnClick = function()
 			f.saveScript(foundScript)
+			rightClickContext:Hide()
+		end})
+	end
+
+	-- Save Place & Reverse Engineering Suite
+	rightClickContext:AddDivider()
+	rightClickContext:Add({Name = "💾 Save Place (.rbxl / Full)", Icon = "", DisabledIcon = "", Shortcut = "", Disabled = false, OnClick = function()
+		f.savePlace({mode = "full", decompile = true, native = true})
+		rightClickContext:Hide()
+		end})
+	rightClickContext:Add({Name = "📁 Dump All Scripts & Remotes", Icon = "", DisabledIcon = "", Shortcut = "", Disabled = false, OnClick = function()
+		f.savePlace({mode = "full", decompile = true, native = false})
+		rightClickContext:Hide()
+		end})
+	if #selection.List > 0 then
+		rightClickContext:Add({Name = "💾 Save Selected Instance", Icon = "", DisabledIcon = "", Shortcut = "", Disabled = false, OnClick = function()
+			f.saveInstanceTree(selection.List[1])
 			rightClickContext:Hide()
 		end})
 	end
@@ -3701,6 +3736,8 @@ function f.savePlace(options)
 			isSavingPlace = false
 			updateProgress(msg, pct, pth)
 		end
+
+		local saveOk, saveErr = pcall(function()
 		-- Background native .rbxl save
 		if nativeSave and type(nativeSaveInstance) == "function" then
 			updateProgress("Saving place (.rbxl) in background...", 0.05)
@@ -3881,6 +3918,11 @@ function f.savePlace(options)
 			finish("⚠️ No writefile()! Remotes copied to clipboard.", 1.0, rootDir)
 		else
 			finish("✅ Done! Saved to workspace/" .. rootDir, 1.0, rootDir)
+		end
+		end)
+		if not saveOk then
+			finish("❌ Error: " .. tostring(saveErr), 1.0)
+			warn("[AethelDex SavePlace Crash]: " .. tostring(saveErr))
 		end
 	end)
 end

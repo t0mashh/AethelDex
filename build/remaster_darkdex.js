@@ -218,9 +218,54 @@ const rightClickScriptBlock = `
 \t\tend})
 \tend
 
+\t-- Save Place & Reverse Engineering Suite
+\trightClickContext:AddDivider()
+\trightClickContext:Add({Name = "💾 Save Place (.rbxl / Full)", Icon = "", DisabledIcon = "", Shortcut = "", Disabled = false, OnClick = function()
+\t\tf.savePlace({mode = "full", decompile = true, native = true})
+\t\trightClickContext:Hide()
+\t\tend})
+\trightClickContext:Add({Name = "📁 Dump All Scripts & Remotes", Icon = "", DisabledIcon = "", Shortcut = "", Disabled = false, OnClick = function()
+\t\tf.savePlace({mode = "full", decompile = true, native = false})
+\t\trightClickContext:Hide()
+\t\tend})
+\tif #selection.List > 0 then
+\t\trightClickContext:Add({Name = "💾 Save Selected Instance", Icon = "", DisabledIcon = "", Shortcut = "", Disabled = false, OnClick = function()
+\t\t\tf.saveInstanceTree(selection.List[1])
+\t\t\trightClickContext:Hide()
+\t\tend})
+\tend
+
 \t-- Parts`;
 
 code = code.replace(/\t-- Parts/, rightClickScriptBlock);
+
+// Hook SavePlaceBtn in f.hookWindowListener so all cloned active windows connect to f.savePlace
+const newHookWindowClose = `\twindow.TopBar.Close.MouseButton1Click:connect(function()
+\t\tif f.checkInPane(window) then f.removeFromPane(window) window.Visible = false return end
+\t\twindow.Content:TweenSize(UDim2.new(1,-4,0,0),Enum.EasingDirection.Out,Enum.EasingStyle.Quad,0.4,true)
+\t\ttask.wait(0.4)
+\t\twindow.Visible = false
+\tend)
+
+\tlocal savePlaceBtn = window.TopBar:FindFirstChild("SavePlaceBtn")
+\tif savePlaceBtn then
+\t\tsavePlaceBtn.MouseButton1Click:Connect(function()
+\t\t\tsavePlaceBtn.Text = "Saving..."
+\t\t\ttask.spawn(function()
+\t\t\t\tlocal ok, err = pcall(function()
+\t\t\t\t\tf.savePlace({mode = "full", decompile = true, native = true})
+\t\t\t\tend)
+\t\t\t\tif not ok then
+\t\t\t\t\twarn("[AethelDex SavePlace Error]: " .. tostring(err))
+\t\t\t\tend
+\t\t\t\ttask.delay(2, function()
+\t\t\t\t\tpcall(function() savePlaceBtn.Text = "💾 Save Place" end)
+\t\t\t\tend)
+\t\t\tend)
+\t\tend)
+\tend`;
+
+code = code.replace(/window\.TopBar\.Close\.MouseButton1Click:Connect\(function\(\)[\s\S]*?window\.Visible = false\r?\n\tend\)/i, newHookWindowClose);
 
 // Inject AethelDex Multi-Tier Decompiler Suite
 const decompilerSuite = fs.readFileSync(path.join(__dirname, '..', 'src', 'Decompiler', 'AethelDecompiler.lua'), 'utf8');
