@@ -2197,18 +2197,42 @@ function f.beautifyDecompiledSource(source, scriptInst)
 	source = source:gsub("^%s*local%s+v%d+.-[\r\n]+", "")
 	source = source:gsub("[\r\n]%s*local%s+v%d+.-[\r\n]+", "\n")
 
-	-- 4. Identify primary module table variable (e.g. u16, v1) and rename to safeName
-	local moduleVar = source:match("local%s+([uv]%d+)%s*=%s*{}")
-		or source:match("return%s+([uv]%d+)%s*$")
-		or source:match("return%s+([uv]%d+)%s*[\r\n]")
+	-- 4. Identify primary module table variable (CHECK THE LAST return STATEMENT FIRST!)
+	local moduleVar = nil
+	for m in source:gmatch("[\r\n]%s*return%s+([uv]%d+)") do
+		moduleVar = m
+	end
+	if not moduleVar then
+		moduleVar = source:match("return%s+([uv]%d+)%s*$")
+			or source:match("local%s+([uv]%d+)%s*=%s*{}")
+	end
+
+	-- 4a. Fix container list generator functions before moduleVar replacement,
+	-- so internal list variables (like containers = {}) are not hijacked by moduleVar!
+	source = source:gsub("local%s+function%s+([%a_][%w_]*Containers)%s*%(%s*%)%s*[\r\n]+(.-)(return%s+[uv]%d+%s*[\r\n]+%s*end)", function(fnName, body)
+		local cleanBody = body:gsub("%f[%w_][uv]%d+%f[^%w_]", "containers")
+		return "local function " .. fnName .. "()\n    local containers = {}\n" .. cleanBody .. "    return containers\nend"
+	end)
 
 	if moduleVar and moduleVar ~= safeName and string.match(moduleVar, "^[uv]%d+$") then
 		source = source:gsub("local%s+" .. moduleVar .. "%s*=", "local " .. safeName .. " =")
 		source = source:gsub("(%f[%w_])" .. moduleVar .. "(%f[^%w_])", safeName)
 	end
 
+	-- Ensure `local safeName = {}` exists if methods are attached to it
+	if safeName and not source:find("local%s+" .. safeName .. "%s*=") then
+		local fnStart = source:find("function%s+" .. safeName .. "[.:]")
+		if fnStart then
+			source = source:sub(1, fnStart - 1) .. "local " .. safeName .. " = {}\n" .. source:sub(fnStart)
+		end
+	end
+
 	-- 4b. Table field declaration simplification: local v2 = {}; Module.Services = v2 -> Module.Services = {}
 	source = source:gsub("local%s+([%a_][%w_]*)%s*=%s*{%}%s*[\r\n]+%s*([%a_][%w_]*)%.([%a_][%w_]*)%s*=%s*%1", "%2.%3 = {}")
+	-- Clean duplicate module declarations (e.g. local Module = {} declared twice)
+	if safeName and #safeName > 0 then
+		source = source:gsub("(local%s+" .. safeName .. "%s*=%s*{%}%s*[\r\n]+)%s*local%s+" .. safeName .. "%s*=%s*{%}%s*[\r\n]+", "%1")
+	end
 
 	-- 5. Dynamic Service Resolution: (u1 = game:GetService("Players")) -> Players
 	for uVar, sName in source:gmatch('([uv]%d+)%s*=%s*[%w_]+:GetService%("([%w_]+)"%)') do
@@ -2269,6 +2293,33 @@ function f.beautifyDecompiledSource(source, scriptInst)
 		'local controllerManager = %2 and humanoid.Parent:FindFirstChild("ControllerManager") or nil')
 	source = source:gsub('getRelativeVelocity%(u208,', 'getRelativeVelocity(controllerManager,')
 	source = source:gsub('u202%[', 'soundInstances[')
+
+	-- 7i. Color constant: local u37 = Color3.fromRGB(255, 200, 60) -> GOLD_COLOR
+	for uVar in source:gmatch('local%s+([uv]%d+)%s*=%s*Color3%.fromRGB%(255,%s*200,%s*60%)') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "GOLD_COLOR")
+	end
+
+	-- 7j. Part original color cache: u40[part] = part.Color -> originalColors
+	for uVar in source:gmatch('([uv]%d+)%[[%a_][%w_]*%]%s*=%s*[%a_][%w_]*%.Color') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "originalColors")
+	end
+
+	-- 7k. Sparkles cache: table.insert(u41, Sparkles) -> activeSparkles
+	for uVar in source:gmatch('table%.insert%(([uv]%d+),%s*Sparkles%)') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "activeSparkles")
+	end
+
+	-- 7l. Active state flag: local u38 = false -> isGoldActive
+	for uVar in source:gmatch('local%s+([uv]%d+)%s*=%s*false%s*[\r\n]+%s*local%s+[uv]%d+%s*=%s*0') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "isGoldActive")
+	end
+
+	-- 7m. Roll ID counter: local u39 = 0 -> currentRollId
+	for uVar in source:gmatch('local%s+([uv]%d+)%s*=%s*0%s*[\r\n]+%s*local%s+[%a_][%w_]*%s*=%s*{%}') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "currentRollId")
+	end
+	source = source:gsub("currentRollId%s*=%s*currentRollId%s*%+%s*1%s*[\r\n]+%s*local%s+([uv]%d+)%s*=%s*currentRollId", "currentRollId = currentRollId + 1\n    local rollId = currentRollId")
+	source = source:gsub("if%s+currentRollId%s*~=%s*[uv]%d+%s+then", "if currentRollId ~= rollId then")
 
 	-- 8. Inverted Numeric & Value Comparison Normalization: (0.1 < var) -> (var > 0.1)
 	source = source:gsub("(%f[%w_]%d+%.?%d*)%s*(<)%s*([%a_][%w_.:]*)", "%3 > %1")
@@ -2437,6 +2488,23 @@ function f.beautifyDecompiledSource(source, scriptInst)
 	source = source:gsub("local%s+function%s+playerAdded%(p1%)", "local function playerAdded(player)")
 	source = source:gsub("local%s+function%s+transitionTo%(p1%)", "local function transitionTo(newState)")
 	source = source:gsub("local%s+function%s+stopPlayingLoopedSounds%(p1%)", "local function stopPlayingLoopedSounds(exceptSound)")
+
+	-- 12f. Dynamic MoodletModule and Service Require Helpers
+	source = source:gsub("local%s+function%s+getMoodletModule%(%).-return%s+[%a_][%w_]*%s*[\r\n]+%s*end",
+		"local function getMoodletModule()\n    local success, module = pcall(function()\n        return require(ReplicatedStorage.MyServices.Services.Client.UIModule.MoodletModule)\n    end)\n    return success and module or nil\nend")
+	source = source:gsub("local%s+[uv]15,%s*v1,%s*v2,%s*v3,%s*serviceModule%s*[\r\n]+", "")
+	source = source:gsub("local%s+[uv]%d+%s*=%s*300%s*[\r\n]+", "local duration = 300\n")
+	source = source:gsub("(%f[%w_])[uv]9(%f[^%w_])", "duration")
+
+	source = source:gsub("[%a_][%w_]*,%s*v2%s*=%s*pcall%(function%(%)[%s\r\n]*return%s+getRestockTime:InvokeServer%(%)",
+		"local success, restockTime = pcall(function()\n        return getRestockTime:InvokeServer()")
+	source = source:gsub("if%s+[%a_][%w_]*%s+and%s+typeof%(v2%)%s*==%s*\"number\"%s+and%s+v2%s*>%s*0%s+then%s*[\r\n]+%s*duration%s*=%s*v2",
+		"if success and typeof(restockTime) == \"number\" and restockTime > 0 then\n        duration = restockTime")
+
+	source = source:gsub("v3,%s*serviceModule%s*=%s*pcall%(function%(%)[%s\r\n]*return%s+require%((.-)%)%s*end%)%s*[\r\n]+%s*if%s+not%s+v3%s+then%s*[\r\n]+%s*[%a_][%w_]*%s*=%s*nil%s*[\r\n]+%s*else%s*[\r\n]+%s*[%a_][%w_]*%s*=%s*serviceModule%s*[\r\n]+%s*end",
+		"local moodletSuccess, moodletModule = pcall(function()\n        return require(%1)\n    end)\n    local moodlet = moodletSuccess and moodletModule or nil")
+	source = source:gsub("if%s+u15%s+then%s*[\r\n]+%s*pcall%(function%(%)[%s\r\n]+u15%.SetLuckMoodlet%(",
+		"if moodlet then\n        pcall(function()\n            moodlet.SetLuckMoodlet(")
 
 	-- 13. Standard Math Map Function
 	source = source:gsub("local%s+function%s+map%(p1,%s*p2,%s*p3,%s*p4,%s*p5%)", "local function map(value, inMin, inMax, outMin, outMax)")
