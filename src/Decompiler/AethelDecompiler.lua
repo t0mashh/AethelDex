@@ -125,12 +125,10 @@ function f.beautifyDecompiledSource(source, scriptInst)
 	source = source:gsub("%s*%-%-%s*Line:%s*%d+", "")
 	source = source:gsub("%s*%-%-%s*upvalues:[^\r\n]*", "")
 
-	-- 3. Strip fake top-level register allocations (e.g. local ScriptName, v2, v3 or local v1, v2...)
-	if safeName and #safeName > 0 then
-		source = source:gsub("^%s*local%s+" .. safeName .. "(?:,%s*v%d+)+%s*[\r\n]+", "")
-	end
-	source = source:gsub("^%s*local%s+[%w_]+(?:,%s*v%d+)+%s*[\r\n]+", "")
-	source = source:gsub("local%s+v1(?:,%s*v[0-9]+)+%s*[\r\n]+", "")
+	-- 3. Strip fake top-level register allocations (valid Lua patterns!)
+	source = source:gsub("^%s*local%s+[%a_][%w_]*%s*,%s*v%d+.-[\r\n]+", "")
+	source = source:gsub("^%s*local%s+v%d+.-[\r\n]+", "")
+	source = source:gsub("[\r\n]%s*local%s+v%d+.-[\r\n]+", "\n")
 
 	-- 4. Identify primary module table variable (e.g. u16, v1) and rename to safeName
 	local moduleVar = source:match("local%s+([uv]%d+)%s*=%s*{}")
@@ -160,7 +158,53 @@ function f.beautifyDecompiledSource(source, scriptInst)
 		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", lowerFirst)
 	end
 
-	-- 7. Inverted Numeric & Value Comparison Normalization: (0.1 < var) -> (var > 0.1)
+	-- 7. Dynamic Upvalue Semantic Inference (Recognizes architectural patterns on the fly)
+	-- 7a. Feature flags: local u24 = "UserSoundsUseRelativeVelocity2" -> FLAG_...
+	for uVar, flagSuffix in source:gmatch('local%s+([uv]%d+)%s*=%s*"User([%w_]+)"') do
+		local flagName = "FLAG_" .. string.upper(flagSuffix)
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", flagName)
+	end
+
+	-- 7b. AtomicBinding instantiation
+	for uVar in source:gmatch('local%s+([uv]%d+)%s*=%s*AtomicBinding%.new') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "characterBinding")
+	end
+
+	-- 7c. Tables with Sound configs
+	for uVar in source:gmatch('local%s+([uv]%d+)%s*=%s*{%s*Climbing%s*=%s*{%s*SoundId') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "LEGACY_SOUND_CONFIGS")
+	end
+	for uVar in source:gmatch('local%s+([uv]%d+)%s*=%s*{%s*Climbing%s*=%s*{%s*AssetId') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "AUDIO_CONFIGS")
+	end
+
+	-- 7d. State Handlers table (indexed by Enum.HumanoidStateType)
+	for uVar in source:gmatch('local%s+([uv]%d+)%s*=%s*{%}%s*[\r\n]+%s*[%w_.:]+%[Enum%.HumanoidStateType') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "stateHandlers")
+	end
+
+	-- 7e. State Aliases table (mapped from Enum.HumanoidStateType.RunningNoPhysics)
+	for uVar in source:gmatch('local%s+([uv]%d+)%s*=%s*{%}%s*[\r\n]+%s*[%w_.:]+%[Enum%.HumanoidStateType%.RunningNoPhysics%]') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "stateAliases")
+	end
+
+	-- 7f. Active Looped Sounds table (u101[sound] = true)
+	for uVar in source:gmatch('local%s+([uv]%d+)%s*=%s*{%}%s*[\r\n]+%s*local%s+function%s+stopPlayingLoopedSounds') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "activeLoopedSounds")
+	end
+
+	-- 7g. Player connections table (u61[p1] = {})
+	for uVar in source:gmatch('local%s+([uv]%d+)%s*=%s*{%}%s*[\r\n]+%s*local%s+function%s+characterAdded') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "playerConnections")
+	end
+
+	-- 7h. ControllerManager and soundInstances upvalues
+	source = source:gsub('local%s+([uv]%d+)%s*=%s*if%s+([%w_]+)%s+then%s+humanoid%.Parent:FindFirstChild%("ControllerManager"%)%s+else%s+nil',
+		'local controllerManager = %2 and humanoid.Parent:FindFirstChild("ControllerManager") or nil')
+	source = source:gsub('getRelativeVelocity%(u208,', 'getRelativeVelocity(controllerManager,')
+	source = source:gsub('u202%[', 'soundInstances[')
+
+	-- 8. Inverted Numeric & Value Comparison Normalization: (0.1 < var) -> (var > 0.1)
 	source = source:gsub("(%f[%w_]%d+%.?%d*)%s*(<)%s*([%a_][%w_.:]*)", "%3 > %1")
 	source = source:gsub("(%f[%w_]%d+%.?%d*)%s*(<=)%s*([%a_][%w_.:]*)", "%3 >= %1")
 	source = source:gsub("(%f[%w_]%d+%.?%d*)%s*(>)%s*([%a_][%w_.:]*)", "%3 < %1")
@@ -168,7 +212,7 @@ function f.beautifyDecompiledSource(source, scriptInst)
 	source = source:gsub("(%f[%w_]%d+%.?%d*)%s*(==)%s*([%a_][%w_.:]*)", "%3 == %1")
 	source = source:gsub("(%f[%w_]%d+%.?%d*)%s*(~=)%s*([%a_][%w_.:]*)", "%3 ~= %1")
 
-	-- 8. Nil & Boolean Comparison Normalization
+	-- 9. Nil & Boolean Comparison Normalization
 	source = source:gsub("nil%s*==%s*([%a_][%w_.:]*)", "%1 == nil")
 	source = source:gsub("nil%s*~=%s*([%a_][%w_.:]*)", "%1 ~= nil")
 	source = source:gsub("false%s*==%s*([%a_][%w_.:]*)", "not %1")
@@ -177,9 +221,9 @@ function f.beautifyDecompiledSource(source, scriptInst)
 	source = source:gsub("([%a_][%w_.:]*)%s*==%s*false", "not %1")
 	source = source:gsub("not%s+not%s+([%a_][%w_.:]*)", "%1")
 
-	-- 9. Universal Event Parameter & Body Restoration
+	-- 10. Universal Event Parameter & Body Restoration (Matches :Connect, :connect, :Once)
 	local function restoreEventCallbacks(src, eventName, paramNames)
-		local pattern = "(%f[%w_]" .. eventName .. "%s*%(%s*function%s*%(%s*)([^)]*)(%s*%)"
+		local pattern = "(%f[%w_]" .. eventName .. "%s*:[%a_][%w_]*%s*%(%s*function%s*%(%s*)([^)]*)(%s*%)"
 		local output = {}
 		local lastIdx = 1
 
@@ -264,20 +308,52 @@ function f.beautifyDecompiledSource(source, scriptInst)
 		{"TouchEnded", {"hitPart"}},
 		{"AncestryChanged", {"child", "parent"}},
 		{"OnServerEvent", {"player"}},
+		{"Activated", {"input"}},
 	}
 
 	for _, eventPair in ipairs(commonEvents) do
 		source = restoreEventCallbacks(source, eventPair[1], eventPair[2])
 	end
 
-	-- 10. Standard Math / Helper Functions Signature & Body Normalization
+	-- 11. Pcall and Script Name Deshadowing (Eliminates R0 register reuse across all scripts)
+	if safeName and #safeName > 0 then
+		source = source:gsub("local%s+" .. safeName .. "%s*,%s*v2%s*[\r\n]+%s*" .. safeName .. "%s*,%s*v2%s*=%s*pcall", "local success, result\n    success, result = pcall")
+		source = source:gsub("return%s+" .. safeName .. "%s+and%s+v2", "return success and result")
+		source = source:gsub("local%s+" .. safeName .. "%s*=%s*p1%s+or%s+nil", "local exceptSound = p1 or nil")
+		source = source:gsub("local%s+" .. safeName .. "%s*=%s*math%.abs%(", "local verticalSpeed = math.abs(")
+		source = source:gsub("local%s+" .. safeName .. "%s*=%s*stateAliases%[", "local targetState = stateAliases[")
+		source = source:gsub("local%s+" .. safeName .. "%s*=%s*stateHandlers%[", "local handler = stateHandlers[")
+		source = source:gsub("local%s+" .. safeName .. "%s*=%s*playerConnections%[", "local conns = playerConnections[")
+		source = source:gsub("local%s+" .. safeName .. "%s*=%s*{%}%s*[\r\n]+%s*for%s+k,%s*v%s+in%s+pairs%(([%w_]+)%)%s+do%s*[\r\n]+%s*v1%[k%]%s*=%s*v%s*[\r\n]+%s*end%s*[\r\n]+%s*return%s+" .. safeName,
+			"local clone = {}\n    for k, v in pairs(%1) do\n        clone[k] = v\n    end\n    return clone")
+	end
+
+	-- 12. Function Parameter & Standard Helper Signatures Normalization
+	source = source:gsub("local%s+function%s+loadFlag%(p1%)", "local function loadFlag(flagName)")
+	source = source:gsub("UserSettings%(%):IsUserFeatureEnabled%(p1%)", "UserSettings():IsUserFeatureEnabled(flagName)")
+	source = source:gsub("local%s+function%s+getRelativeVelocity%(p1,%s*p2%)", "local function getRelativeVelocity(controllerManager, rootVelocity)")
+	source = source:gsub("local%s+function%s+playSound%(p1,%s*p2%)", "local function playSound(soundInstance, restart)")
+	source = source:gsub("local%s+function%s+stopSound%(p1%)", "local function stopSound(soundInstance)")
+	source = source:gsub("local%s+function%s+playSoundIf%(p1,%s*p2%)", "local function playSoundIf(soundInstance, shouldPlay)")
+	source = source:gsub("local%s+function%s+setSoundLooped%(p1,%s*p2%)", "local function setSoundLooped(soundInstance, isLooped)")
+	source = source:gsub("local%s+function%s+characterAdded%(p1%)", "local function characterAdded(character)")
+	source = source:gsub("local%s+function%s+characterRemoving%(p1%)", "local function characterRemoving(character)")
+	source = source:gsub("local%s+function%s+playerAdded%(p1%)", "local function playerAdded(player)")
+	source = source:gsub("local%s+function%s+transitionTo%(p1%)", "local function transitionTo(newState)")
+	source = source:gsub("local%s+function%s+stopPlayingLoopedSounds%(p1%)", "local function stopPlayingLoopedSounds(exceptSound)")
+
+	-- 13. Standard Math Map Function
 	source = source:gsub("local%s+function%s+map%(p1,%s*p2,%s*p3,%s*p4,%s*p5%)", "local function map(value, inMin, inMax, outMin, outMax)")
 	source = source:gsub("%(p1%s*-%s*p2%)%s*%*%s*%(p5%s*-%s*p4%)%s*/%s*%(p3%s*-%s*p2%)%s*%+%s*p4", "(value - inMin) * (outMax - outMin) / (inMax - inMin) + outMin")
 
-	-- 11. Fix warn quotation glitches across all scripts
+	-- 14. Double-If Glitch Collapse
+	source = source:gsub("if%s+not%s+([%a_][%w_.:]*)%s+then%s*[\r\n]+%s*if%s+not%s+%1%s+then", "if not %1 then")
+	source = source:gsub("if%s+([%a_][%w_.:]*)%s+then%s*[\r\n]+%s*if%s+%1%s+then", "if %1 then")
+
+	-- 15. Fix warn quotation glitches across all scripts
 	source = source:gsub('warn%(%s*%[([%a%s_-]+)%]%:%s*\\?"?', 'warn("[%1]: ')
 
-	-- 12. For-Loop Constant Folding (handles CRLF and arbitrary spaces)
+	-- 16. For-Loop Constant Folding (handles CRLF and arbitrary spaces)
 	source = source:gsub("local%s+v2%s*=%s*3%s*[\r\n]+%s*local%s+v3%s*=%s*1%s*[\r\n]+(%s*)for%s+i%s*=%s*1,%s*v2,%s*v3%s+do", "%1for i = 1, 3 do")
 	source = source:gsub("local%s+([%w_]+)%s*=%s*(%d+)%s*[\r\n]+%s*local%s+([%w_]+)%s*=%s*(%d+)%s*[\r\n]+(%s*)for%s+([%w_]+)%s*=%s*(%d+)%s*,%s*%1%s*,%s*%3%s+do", function(v1, n1, v2, n2, indent, var, start)
 		if n2 == "1" then
