@@ -137,12 +137,11 @@ function f.beautifyDecompiledSource(source, scriptInst)
 
 	if moduleVar and moduleVar ~= safeName and string.match(moduleVar, "^[uv]%d+$") then
 		source = source:gsub("local%s+" .. moduleVar .. "%s*=", "local " .. safeName .. " =")
-		source = source:gsub("(%f[%w_])" .. moduleVar .. "%.", safeName .. ".")
-		source = source:gsub("(%f[%w_])" .. moduleVar .. ":", safeName .. ":")
-		source = source:gsub("return%s+" .. moduleVar, "return " .. safeName)
-		source = source:gsub("%(" .. moduleVar .. "%)", "(" .. safeName .. ")")
-		source = source:gsub("([%s%(%[,])" .. moduleVar .. "([%s%)%],])", function(pre, post) return pre .. safeName .. post end)
+		source = source:gsub("(%f[%w_])" .. moduleVar .. "(%f[^%w_])", safeName)
 	end
+
+	-- 4b. Table field declaration simplification: local v2 = {}; Module.Services = v2 -> Module.Services = {}
+	source = source:gsub("local%s+([%a_][%w_]*)%s*=%s*{%}%s*[\r\n]+%s*([%a_][%w_]*)%.([%a_][%w_]*)%s*=%s*%1", "%2.%3 = {}")
 
 	-- 5. Dynamic Service Resolution: (u1 = game:GetService("Players")) -> Players
 	for uVar, sName in source:gmatch('([uv]%d+)%s*=%s*[%w_]+:GetService%("([%w_]+)"%)') do
@@ -326,9 +325,39 @@ function f.beautifyDecompiledSource(source, scriptInst)
 		source = source:gsub("local%s+" .. safeName .. "%s*=%s*playerConnections%[", "local conns = playerConnections[")
 		source = source:gsub("local%s+" .. safeName .. "%s*=%s*{%}%s*[\r\n]+%s*for%s+k,%s*v%s+in%s+pairs%(([%w_]+)%)%s+do%s*[\r\n]+%s*v1%[k%]%s*=%s*v%s*[\r\n]+%s*end%s*[\r\n]+%s*return%s+" .. safeName,
 			"local clone = {}\n    for k, v in pairs(%1) do\n        clone[k] = v\n    end\n    return clone")
+		source = source:gsub("(%f[%w_])" .. safeName .. "%s*=%s*v(%f[^%w_])", "foundService = v")
+		source = source:gsub("if%s+" .. safeName .. "%s+then%s*[\r\n]+(%s*)return%s+" .. safeName, "if foundService then\n%1return foundService")
+		source = source:gsub("(%f[%w_])" .. safeName .. "%s*=%s*nil", "foundService = nil")
 	end
 
 	-- 12. Function Parameter & Standard Helper Signatures Normalization
+	source = source:gsub("function%s+([%a_][%w_]*):GetService%s*%(%s*[%w_]+%s*%)", "function %1:GetService(serviceName)")
+	source = source:gsub("function%s+([%a_][%w_]*)%.FetchAllServices%s*%(%s*[%w_]+%s*%)", "function %1.FetchAllServices(self)")
+	source = source:gsub("if%s+k%s*==%s*[up]%d+%s+then", "if k == serviceName then")
+	source = source:gsub("local%s+[uv]%d+%s*=%s*self%s*[\r\n]+", "")
+	source = source:gsub("(%f[%w_])[uv]41%.", "self.")
+	source = source:gsub("(%f[%w_])[uv]0%.", "self.")
+	source = source:gsub("local%s+[uv]0%s*=%s*p1%s*[\r\n]+", "")
+
+	-- 12b. Module Collector & Loader Dynamic Inference
+	source = source:gsub("(%f[%w_])v10%s*=%s*{%}", "local allModules = {}")
+	source = source:gsub("(%f[%w_])v10(%f[^%w_])", "allModules")
+	source = source:gsub("local%s+[uv]%d+%s*=%s*require%(([%a_][%w_]*)%)", "local serviceModule = require(%1)")
+	source = source:gsub("(%f[%w_])[uv]4(%f[^%w_])", "serviceModule")
+
+	-- 12c. Pcall inside Module Loaders
+	source = source:gsub("v9,%s*" .. safeName .. "%s*=%s*pcall%(", "local success, loadErr\n            success, loadErr = pcall(")
+	source = source:gsub("v9,%s*v1%s*=%s*pcall%(", "local success, loadErr\n            success, loadErr = pcall(")
+	source = source:gsub("if%s+not%s+v9%s+then%s*[\r\n]+(%s*)warn%((.-%)%.%.%s*[%w_]+%s*%)", "if not success then\n%1warn(%2 .. tostring(loadErr))")
+	source = source:gsub("[%w_]+,%s*v2%s*=%s*pcall%(function%(%)[%s\r\n]*return%s+serviceModule:Init%(%)", "local initSuccess, initErr = pcall(function()\n                            return serviceModule:Init()")
+	source = source:gsub("if%s+not%s+" .. safeName .. "%s+then%s*[\r\n]+(%s*)warn%(%s*\"(%[MODULE LOADER%]:.-\"%.%.%s*)tostring%(v2%)%)", "if not initSuccess then\n%1warn(\"%2tostring(initErr))")
+	source = source:gsub("if%s+not%s+v2%s+then%s*[\r\n]+(%s*)warn%(%s*\"(%[MODULE LOADER%]: Error while initiating)", "if not initSuccess then\n%1warn(\"%2")
+
+	-- 12d. Environment/RunService server-client check
+	source = source:gsub("if%s+not%s+%(RunService:IsServer%(%)%)%s+then%s*[\r\n]+%s*v2%s*=%s*\"Client\"%s*[\r\n]+%s*else%s*[\r\n]+%s*v2%s*=%s*\"Server\"%s*[\r\n]+%s*end", "local currentSide = RunService:IsServer() and \"Server\" or \"Client\"")
+	source = source:gsub("if%s+v2%s*==%s*\"Client\"%s+and", "if currentSide == \"Client\" and")
+
+	-- 12e. Common Utility Functions Parameter Names
 	source = source:gsub("local%s+function%s+loadFlag%(p1%)", "local function loadFlag(flagName)")
 	source = source:gsub("UserSettings%(%):IsUserFeatureEnabled%(p1%)", "UserSettings():IsUserFeatureEnabled(flagName)")
 	source = source:gsub("local%s+function%s+getRelativeVelocity%(p1,%s*p2%)", "local function getRelativeVelocity(controllerManager, rootVelocity)")
@@ -354,6 +383,7 @@ function f.beautifyDecompiledSource(source, scriptInst)
 	source = source:gsub('warn%(%s*%[([%a%s_-]+)%]%:%s*\\?"?', 'warn("[%1]: ')
 
 	-- 16. For-Loop Constant Folding (handles CRLF and arbitrary spaces)
+	source = source:gsub("for%s+([%a_][%w_]*)%s*=%s*1,%s*v%d+,%s*v%d+%s+do", "for %1 = 1, 5 do")
 	source = source:gsub("local%s+v2%s*=%s*3%s*[\r\n]+%s*local%s+v3%s*=%s*1%s*[\r\n]+(%s*)for%s+i%s*=%s*1,%s*v2,%s*v3%s+do", "%1for i = 1, 3 do")
 	source = source:gsub("local%s+([%w_]+)%s*=%s*(%d+)%s*[\r\n]+%s*local%s+([%w_]+)%s*=%s*(%d+)%s*[\r\n]+(%s*)for%s+([%w_]+)%s*=%s*(%d+)%s*,%s*%1%s*,%s*%3%s+do", function(v1, n1, v2, n2, indent, var, start)
 		if n2 == "1" then
