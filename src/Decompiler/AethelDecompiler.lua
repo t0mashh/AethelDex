@@ -262,7 +262,7 @@ function f.beautifyDecompiledSource(source, scriptInst)
 	for uVar in source:gmatch('([uv]%d+)%s*=%s*workspace[%w_.:]*:WaitForChild%("SellNPC"%)') do
 		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "sellNPC")
 	end
-	for uVar in source:gmatch('([uv]%d+)%s*=%s*sellNPC:GetPivot%(%)') do
+	for uVar in source:gmatch('([uv]%d+)%s*=%s*[%a_][%w_]*:GetPivot%(%)') do
 		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "sellNPCPivot")
 	end
 	for uVar in source:gmatch('local%s+function%s+clearTouchConnection%(%)[^{]*if%s+([uv]%d+)%s+then%s*%1:Disconnect%(%)') do
@@ -280,13 +280,13 @@ function f.beautifyDecompiledSource(source, scriptInst)
 	for uVar in source:gmatch('substeps%[([uv]%d+)%]') do
 		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "currentSubstep")
 	end
-	for uVar in source:gmatch('function%s+[%a_][%w_]*%.IsActive%([^\)]*%)%s*return%s+([uv]%d+)') do
+	for uVar in source:gmatch('function%s+[%a_][%w_]*%.IsActive%([^)]*%)%s*return%s+([uv]%d+)') do
 		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "isTutorialActive")
 	end
 	for uVar in source:gmatch('local%s+function%s+beginTutorial%(%)[^{]*if%s+([uv]%d+)%s+then%s*return%s*end%s*%1%s*=%s*true') do
 		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "tutorialStarted")
 	end
-	for uVar in source:gmatch('target%s*==%s*"SpawnedCraig"[^{]*return%s+([uv]%d+)') do
+	for uVar in source:gmatch('target%s*==%s*"SpawnedCraig"%s+then%s*return%s+([uv]%d+)') do
 		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "spawnedCraig")
 	end
 	for uVar in source:gmatch('([uv]%d+)%s*=%s*Animator:LoadAnimation%(CoreMovement%.IdleAnim%)') do
@@ -315,7 +315,7 @@ function f.beautifyDecompiledSource(source, scriptInst)
 
 	-- 10. Universal Event Parameter & Body Restoration (Matches :Connect, :connect, :Once)
 	local function restoreEventCallbacks(src, eventName, paramNames)
-		local pattern = "(%f[%w_]" .. eventName .. "%s*:[%a_][%w_]*%s*%(%s*function%s*%(%s*)([^)]*)(%s*%)"
+		local pattern = "(%f[%w_]" .. eventName .. "%s*:[%a_][%w_]*%s*%(%s*function%s*%(%s*)([^)]*)(%s*)%)"
 		local output = {}
 		local lastIdx = 1
 
@@ -495,8 +495,8 @@ function f.beautifyDecompiledSource(source, scriptInst)
 		"if moodlet then\n        pcall(function()\n            moodlet.SetLuckMoodlet(")
 
 	-- 12g. Dynamic Input & Service Helper Normalization
-	source = source:gsub("local%s+function%s+isTouch%(%).-return%s+[%a_][%w_]*%s*[\r\n]+%s*end",
-		"local function isTouch()\n    if not localPlayerUtils then return false end\n    local success, state = pcall(function()\n        return localPlayerUtils:GetState(\"TouchControls\")\n    end)\n    return success and state == true\nend")
+	source = source:gsub("local%s+function%s+isTouch%(%).-(local%s+function%s+logFunnel)",
+		"local function isTouch()\n    if not LocalPlayerUtils then return false end\n    local success, state = pcall(function()\n        return LocalPlayerUtils:GetState(\"TouchControls\")\n    end)\n    return success and state == true\nend\n\n%1")
 
 	if safeName and #safeName > 0 then
 		source = source:gsub("function%s+" .. safeName .. "%.Signal%(p1,%s*p2%)", "function " .. safeName .. ".Signal(self, signalName)")
