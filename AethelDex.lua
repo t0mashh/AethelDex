@@ -2211,6 +2211,7 @@ function f.beautifyDecompiledSource(source, scriptInst)
 	-- so internal list variables (like containers = {}) are not hijacked by moduleVar!
 	source = source:gsub("local%s+function%s+([%a_][%w_]*Containers)%s*%(%s*%)%s*[\r\n]+(.-)(return%s+[uv]%d+%s*[\r\n]+%s*end)", function(fnName, body)
 		local cleanBody = body:gsub("%f[%w_][uv]%d+%f[^%w_]", "containers")
+		cleanBody = cleanBody:gsub("%%", "%%%%")
 		return "local function " .. fnName .. "()\n    local containers = {}\n" .. cleanBody .. "    return containers\nend"
 	end)
 
@@ -2344,7 +2345,14 @@ function f.beautifyDecompiledSource(source, scriptInst)
 		local output = {}
 		local lastIdx = 1
 
+		local iterationSafety = 0
 		while true do
+			iterationSafety = iterationSafety + 1
+			if iterationSafety > 100 then
+				table.insert(output, string.sub(src, lastIdx))
+				break
+			end
+
 			local mStart, mEnd, prefix, oldParamsStr, suffix = string.find(src, pattern, lastIdx)
 			if not mStart then
 				table.insert(output, string.sub(src, lastIdx))
@@ -2368,8 +2376,12 @@ function f.beautifyDecompiledSource(source, scriptInst)
 			local depth = 1
 			local bodyEnd = nil
 			local srcLen = #src
+			local tokenSafety = 0
 
 			while searchIdx <= srcLen do
+				tokenSafety = tokenSafety + 1
+				if tokenSafety > 2000 then break end
+
 				local tokenStart, tokenEnd, token = string.find(src, "(%f[%w_][%a_][%w_]*%f[^%w_])", searchIdx)
 				if not tokenStart then break end
 
@@ -2429,7 +2441,9 @@ function f.beautifyDecompiledSource(source, scriptInst)
 	}
 
 	for _, eventPair in ipairs(commonEvents) do
-		source = restoreEventCallbacks(source, eventPair[1], eventPair[2])
+		if string.find(source, eventPair[1], 1, true) then
+			source = restoreEventCallbacks(source, eventPair[1], eventPair[2])
+		end
 	end
 
 	-- 11. Pcall and Script Name Deshadowing (Eliminates R0 register reuse across all scripts)
@@ -2990,7 +3004,7 @@ function f.disassembleLuauBytecode(bytecode, scriptInst)
 	end
 	
 	local rawSource = table.concat(lines, "\n")
-	return f.beautifyDecompiledSource(rawSource, scriptInst)
+	return rawSource
 end
 
 -- [[ Master Decompiler Pipeline ]]
@@ -3012,14 +3026,14 @@ function f.decompileScript(scriptInst)
 	if type(decompile) == "function" then
 		local ok, res = pcall(decompile, scriptInst)
 		if ok and type(res) == "string" and #res > 30 and not string.find(res, "failed to decompile", 1, true) then
-			return f.beautifyDecompiledSource(res, scriptInst)
+			return res
 		end
 	end
 
 	-- 2. Plain Source
 	local hasSource, rawSource = pcall(function() return scriptInst.Source end)
 	if hasSource and type(rawSource) == "string" and #rawSource > 0 then
-		return f.beautifyDecompiledSource(rawSource, scriptInst)
+		return rawSource
 	end
 
 	-- 3. Extract Bytecode from script instance
@@ -3038,7 +3052,7 @@ function f.decompileScript(scriptInst)
 			if type(decompile) == "function" then
 				local ok2, res2 = pcall(decompile, closure)
 				if ok2 and type(res2) == "string" and #res2 > 30 and not string.find(res2, "failed", 1, true) then
-					return f.beautifyDecompiledSource(res2, scriptInst)
+					return res2
 				end
 			end
 			local dump = getGlobal("dumpstring") or string.dump
@@ -3065,7 +3079,7 @@ function f.decompileScript(scriptInst)
 				})
 			end)
 			if ok and type(resp) == "table" and (resp.StatusCode == 200 or resp.Status == 200) and type(resp.Body) == "string" and #resp.Body > 30 then
-				return f.beautifyDecompiledSource(resp.Body, scriptInst)
+				return resp.Body
 			end
 		end
 
@@ -3342,9 +3356,22 @@ function f.viewScript(scriptInst)
 	scriptViewerWindow.Visible = true
 
 	task.spawn(function()
-		local source = f.decompileScript(scriptInst)
+		local ok, source = pcall(f.decompileScript, scriptInst)
+		if not ok or not source or #source == 0 then
+			scriptViewerBox.Text = "-- [AethelDex Decompiler Error]: " .. tostring(source or "Decompilation returned empty output")
+			return
+		end
+
 		rawDecompiledSource = source
-		local displayedSource = isBeautified and f.beautifyDecompiledSource(source, scriptInst) or source
+		local displayedSource = source
+		if isBeautified then
+			local okB, beautified = pcall(f.beautifyDecompiledSource, source, scriptInst)
+			if okB and beautified and #beautified > 0 then
+				displayedSource = beautified
+			else
+				displayedSource = source
+			end
+		end
 		scriptViewerBox.Text = displayedSource
 		
 		local lineCount = select(2, string.gsub(displayedSource, "\n", "\n")) + 1
