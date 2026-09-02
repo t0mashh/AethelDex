@@ -34,6 +34,9 @@ code = code.replace(/\bwait\(/g, 'task.wait(');
 // Clean break; to break (Lua 5.1 compliance)
 code = code.replace(/break;/g, 'break');
 
+// Prepend local f = {} at the very top of script so all functions have it in scope
+code = "local f = {}\n" + code;
+
 // 6. Safe Stealth Host in createDexGui
 const safeHostCode = `
 function createDexGui()
@@ -75,7 +78,20 @@ code = code.replace(
 	'local DexGui62 = CreateInstance("TextButton",{Font=3,FontSize=5,Text="",TextColor3=Color3.new(0.10588236153126,0.16470588743687,0.20784315466881),TextScaled=false,TextSize=14,TextStrokeColor3=Color3.new(0,0,0),TextStrokeTransparency=1,TextTransparency=0,TextWrapped=false,TextXAlignment=2,TextYAlignment=1,AutoButtonColor=true,Modal=false,Selected=false,Style=0,Active=true,AnchorPoint=Vector2.new(0,0),BackgroundColor3=Color3.new(0.21960785984993,0.21960785984993,0.21960785984993),BackgroundTransparency=1,BorderColor3=Color3.new(0.10588236153126,0.16470588743687,0.20784315466881),BorderSizePixel=0,ClipsDescendants=false,Draggable=false,Position=UDim2.new(1,-25,0,25),Rotation=0,Selectable=true,Size=UDim2.new(0,25,0,25),SizeConstraint=0,Visible=true,ZIndex=1,Name="Settings",Parent = DexGui55})',
 	`local savePlaceTopBtn = CreateInstance("TextButton",{Font=3,FontSize=5,Text="💾 Save Place",TextColor3=Color3.fromRGB(240,240,240),TextScaled=false,TextSize=11,TextStrokeColor3=Color3.new(0,0,0),TextStrokeTransparency=1,TextTransparency=0,TextWrapped=false,TextXAlignment=2,TextYAlignment=1,AutoButtonColor=true,Modal=false,Selected=false,Style=0,Active=true,AnchorPoint=Vector2.new(0,0),BackgroundColor3=Color3.fromRGB(35,85,155),BackgroundTransparency=0,BorderColor3=Color3.new(0,0,0),BorderSizePixel=0,ClipsDescendants=false,Draggable=false,Position=UDim2.new(1,-115,0,2),Rotation=0,Selectable=true,Size=UDim2.new(0,85,0,21),SizeConstraint=0,Visible=true,ZIndex=5,Name="SavePlaceBtn",Parent = DexGui55})
 	local spc = Instance.new("UICorner") spc.CornerRadius = UDim.new(0, 4) spc.Parent = savePlaceTopBtn
-	savePlaceTopBtn.MouseButton1Click:Connect(function() f.savePlace({mode = "full", decompile = true, native = true}) end)
+	savePlaceTopBtn.MouseButton1Click:Connect(function()
+		savePlaceTopBtn.Text = "Saving..."
+		task.spawn(function()
+			local ok, err = pcall(function()
+				f.savePlace({mode = "full", decompile = true, native = true})
+			end)
+			if not ok then
+				warn("[AethelDex SavePlace Error]: " .. tostring(err))
+			end
+			task.delay(3, function()
+				pcall(function() savePlaceTopBtn.Text = "💾 Save Place" end)
+			end)
+		end)
+	end)
 	local DexGui62 = CreateInstance("TextButton",{Font=3,FontSize=5,Text="",TextColor3=Color3.new(0.10588236153126,0.16470588743687,0.20784315466881),TextScaled=false,TextSize=14,TextStrokeColor3=Color3.new(0,0,0),TextStrokeTransparency=1,TextTransparency=0,TextWrapped=false,TextXAlignment=2,TextYAlignment=1,AutoButtonColor=true,Modal=false,Selected=false,Style=0,Active=true,AnchorPoint=Vector2.new(0,0),BackgroundColor3=Color3.new(0.21960785984993,0.21960785984993,0.21960785984993),BackgroundTransparency=1,BorderColor3=Color3.new(0.10588236153126,0.16470588743687,0.20784315466881),BorderSizePixel=0,ClipsDescendants=false,Draggable=false,Position=UDim2.new(1,-25,0,25),Rotation=0,Selectable=true,Size=UDim2.new(0,25,0,25),SizeConstraint=0,Visible=true,ZIndex=1,Name="Settings",Parent = DexGui55})`
 );
 
@@ -98,6 +114,9 @@ end
 `;
 
 // Insert ensureChildren before f.updateTree
+code = code.replace(/local activeWindows = \{\}[\r\n\s]+local f = \{\}/, `local activeWindows = {}
+-- f already declared at top
+f = f or {}`);
 code = code.replace(/function f\.updateTree\(self\)/, ensureChildrenFunc + "\nfunction f.updateTree(self)");
 
 // Update expand(self, item) in TreeView

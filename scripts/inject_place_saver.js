@@ -220,13 +220,13 @@ end)
 	return table.concat(lines, "\\n")
 end
 
--- [[ Save Progress UI Dialog ]]
-local saveProgressWindow = nil
+-- [[ Save Progress UI Dialog with dedicated ScreenGui container ]]
+local saveProgressGui = nil
 
 function f.createSaveProgressUI(gameName, placeId)
-	if saveProgressWindow and saveProgressWindow.Parent then
-		pcall(function() saveProgressWindow:Destroy() end)
-		saveProgressWindow = nil
+	if saveProgressGui and saveProgressGui.Parent then
+		pcall(function() saveProgressGui:Destroy() end)
+		saveProgressGui = nil
 	end
 
 	local hostParent = nil
@@ -243,8 +243,17 @@ function f.createSaveProgressUI(gameName, placeId)
 		pcall(function() hostParent = game:GetService("Players").LocalPlayer:FindFirstChildOfClass("PlayerGui") end)
 	end
 
+	local screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "AethelDex_SaveProgressGui"
+	screenGui.DisplayOrder = 10000
+	screenGui.ResetOnSpawn = false
+	if hostParent then
+		screenGui.Parent = hostParent
+	end
+	saveProgressGui = screenGui
+
 	local win = Instance.new("Frame")
-	win.Name = "AethelDex_SaveProgress"
+	win.Name = "SaveProgressWindow"
 	win.Size = UDim2.new(0, 460, 0, 180)
 	win.Position = UDim2.new(0.5, -230, 0.5, -90)
 	win.BackgroundColor3 = Color3.fromRGB(30, 30, 32)
@@ -253,6 +262,7 @@ function f.createSaveProgressUI(gameName, placeId)
 	win.ZIndex = 200
 	win.Active = true
 	win.Draggable = true
+	win.Parent = screenGui
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 8)
@@ -323,7 +333,7 @@ function f.createSaveProgressUI(gameName, placeId)
 	statusLabel.TextXAlignment = Enum.TextXAlignment.Left
 	statusLabel.TextYAlignment = Enum.TextYAlignment.Top
 	statusLabel.TextWrapped = true
-	statusLabel.Text = "Initializing save pipeline..."
+	statusLabel.Text = "Initializing reverse engineering pipeline..."
 	statusLabel.ZIndex = 201
 	statusLabel.Parent = win
 
@@ -384,14 +394,11 @@ function f.createSaveProgressUI(gameName, placeId)
 	pCorner.Parent = copyPathBtn
 
 	closeBtn.MouseButton1Click:Connect(function()
-		win:Destroy()
-		saveProgressWindow = nil
+		if saveProgressGui then
+			saveProgressGui:Destroy()
+			saveProgressGui = nil
+		end
 	end)
-
-	if hostParent then
-		win.Parent = hostParent
-	end
-	saveProgressWindow = win
 
 	local function update(text, frac, savedPath)
 		pcall(function()
@@ -408,6 +415,13 @@ function f.createSaveProgressUI(gameName, placeId)
 						copyPathBtn.Text = "Copied!"
 						task.delay(1, function() copyPathBtn.Text = "Copy Path" end)
 					end
+				end)
+				pcall(function()
+					game:GetService("StarterGui"):SetCore("SendNotification", {
+						Title = "AethelDex Place Saver",
+						Text = "Place saved to workspace/" .. tostring(savedPath),
+						Duration = 10
+					})
 				end)
 			end
 		end)
@@ -463,16 +477,19 @@ function f.savePlace(options)
 	local win, updateProgress = f.createSaveProgressUI(gameName, placeId)
 
 	task.spawn(function()
+		-- Background native .rbxl save
 		if nativeSave and type(nativeSaveInstance) == "function" then
-			updateProgress("Saving place (.rbxl) via executor...", 0.05)
-			pcall(function()
-				nativeSaveInstance({
-					mode = "full",
-					noscripts = false,
-					decompile = false,
-					timeout = 60,
-					saveplayers = false
-				})
+			updateProgress("Saving place (.rbxl) in background...", 0.05)
+			task.spawn(function()
+				pcall(function()
+					nativeSaveInstance({
+						mode = "full",
+						noscripts = false,
+						decompile = false,
+						timeout = 30,
+						saveplayers = false
+					})
+				end)
 			end)
 		end
 
@@ -550,7 +567,7 @@ function f.savePlace(options)
 
 		local totalScripts = #allScripts
 		updateProgress("Found " .. totalScripts .. " scripts and " .. (#allRemotes.Events + #allRemotes.Functions) .. " remotes!", 0.2)
-		task.wait(0.2)
+		task.wait(0.1)
 
 		local function ensurePath(relFolder)
 			if not hasFS or not makefolder then return end
@@ -589,8 +606,11 @@ function f.savePlace(options)
 			local percent = 0.2 + (0.6 * (i / math.max(totalScripts, 1)))
 			updateProgress("Decompiling (" .. i .. "/" .. totalScripts .. "): " .. scriptName, percent)
 
-			local source = f.decompileScript(scriptInst)
-			source = f.beautifyDecompiledSource(source, scriptInst)
+			local source = "-- Decompilation failed"
+			pcall(function()
+				source = f.decompileScript(scriptInst)
+				source = f.beautifyDecompiledSource(source, scriptInst)
+			end)
 
 			if hasFS and writefile then
 				pcall(function()
@@ -672,23 +692,17 @@ function f.saveInstanceTree(targetInst)
 	print("[AethelDex] Saved instance tree for " .. targetInst.Name .. " (" .. scriptCount .. " scripts dumped)")
 end`;
 
-const origSaveScript = `function f.saveScript(scriptInst)
-	if not scriptInst then return end
-	local source = f.decompileScript(scriptInst)
-	pcall(function()
-		local writefile = getGlobal("writefile")
-		if type(writefile) == "function" then
-			local filename = scriptInst.Name:gsub("[^%w_%-]", "_") .. "_" .. scriptInst.ClassName .. ".lua"
-			writefile(filename, source)
-		end
-	end)
-end`;
+// Replace function f.saveScript with regex to be CRLF-safe
+const saveScriptRegex = /function f\.saveScript\(scriptInst\)[\s\S]*?\nend/;
+if (!saveScriptRegex.test(decompiler)) {
+	throw new Error("Could not find f.saveScript in AethelDecompiler.lua!");
+}
+decompiler = decompiler.replace(saveScriptRegex, placeSaverSuite);
 
-decompiler = decompiler.replace(origSaveScript, placeSaverSuite);
-
-// Also add Save Place button in ScriptViewer topBar
-const targetCopyBtn = `\t\tcopyBtn.Parent = topBar`;
-const savePlaceBtnViewer = `\t\tcopyBtn.Parent = topBar
+// Also add Save Place button in ScriptViewer topBar if not already added
+if (!decompiler.includes('savePlaceBtn.Name = "SavePlace"')) {
+	const targetCopyBtn = `\t\tcopyBtn.Parent = topBar`;
+	const savePlaceBtnViewer = `\t\tcopyBtn.Parent = topBar
 
 		local savePlaceBtn = Instance.new("TextButton")
 		savePlaceBtn.Name = "SavePlace"
@@ -706,69 +720,12 @@ const savePlaceBtnViewer = `\t\tcopyBtn.Parent = topBar
 			f.savePlace({mode = "full", decompile = true, native = true})
 		end)`;
 
-decompiler = decompiler.replace(targetCopyBtn, savePlaceBtnViewer);
-
-decompiler = decompiler.replace(
-    `beautifyBtn.Position = UDim2.new(1, -236, 0, 4)`,
-    `beautifyBtn.Position = UDim2.new(1, -330, 0, 4)`
-);
+	decompiler = decompiler.replace(targetCopyBtn, savePlaceBtnViewer);
+	decompiler = decompiler.replace(
+		`beautifyBtn.Position = UDim2.new(1, -236, 0, 4)`,
+		`beautifyBtn.Position = UDim2.new(1, -330, 0, 4)`
+	);
+}
 
 fs.writeFileSync(decompilerPath, decompiler, 'utf8');
-console.log("Updated AethelDecompiler.lua successfully!");
-
-// 2. Update build/remaster_darkdex.js
-const remasterPath = path.join(__dirname, '..', 'build', 'remaster_darkdex.js');
-let remaster = fs.readFileSync(remasterPath, 'utf8');
-
-const oldRightClick = `\t\trightClickContext:Add({Name = "Save Script", Icon = "", DisabledIcon = "", Shortcut = "", Disabled = false, OnClick = function()
-\t\t\tf.saveScript(foundScript)
-\t\t\trightClickContext:Hide()
-\t\tend})
-\tend
-
-\t-- Parts`;
-
-const newRightClick = `\t\trightClickContext:Add({Name = "Save Script", Icon = "", DisabledIcon = "", Shortcut = "", Disabled = false, OnClick = function()
-\t\t\tf.saveScript(foundScript)
-\t\t\trightClickContext:Hide()
-\t\tend})
-\tend
-
-\t-- Save Place & Reverse Engineering Suite
-\trightClickContext:AddDivider()
-\trightClickContext:Add({Name = "💾 Save Place (.rbxl / Full)", Icon = "", DisabledIcon = "", Shortcut = "", Disabled = false, OnClick = function()
-\t\tf.savePlace({mode = "full", decompile = true, native = true})
-\t\trightClickContext:Hide()
-\tend})
-\trightClickContext:Add({Name = "📁 Dump All Scripts & Remotes", Icon = "", DisabledIcon = "", Shortcut = "", Disabled = false, OnClick = function()
-\t\tf.savePlace({mode = "full", decompile = true, native = false})
-\t\trightClickContext:Hide()
-\tend})
-\tif #selection.List > 0 then
-\t\trightClickContext:Add({Name = "💾 Save Selected Instance", Icon = "", DisabledIcon = "", Shortcut = "", Disabled = false, OnClick = function()
-\t\tf.saveInstanceTree(selection.List[1])
-\t\trightClickContext:Hide()
-\t\tend})
-\tend
-
-\t-- Parts`;
-
-remaster = remaster.replace(oldRightClick, newRightClick);
-
-// Add TopBar button in Explorer
-const oldTopBarTarget = `// 7. Fix folder expanding: ensure children are populated on expand + check children in NodeDraw`;
-const newTopBarInsert = `// Add Save Place button into Explorer TopBar
-code = code.replace(
-\t'local DexGui62 = CreateInstance("TextButton",{Font=3,FontSize=5,Text="",TextColor3=Color3.new(0.10588236153126,0.16470588743687,0.20784315466881),TextScaled=false,TextSize=14,TextStrokeColor3=Color3.new(0,0,0),TextStrokeTransparency=1,TextTransparency=0,TextWrapped=false,TextXAlignment=2,TextYAlignment=1,AutoButtonColor=true,Modal=false,Selected=false,Style=0,Active=true,AnchorPoint=Vector2.new(0,0),BackgroundColor3=Color3.new(0.21960785984993,0.21960785984993,0.21960785984993),BackgroundTransparency=1,BorderColor3=Color3.new(0.10588236153126,0.16470588743687,0.20784315466881),BorderSizePixel=0,ClipsDescendants=false,Draggable=false,Position=UDim2.new(1,-25,0,25),Rotation=0,Selectable=true,Size=UDim2.new(0,25,0,25),SizeConstraint=0,Visible=true,ZIndex=1,Name="Settings",Parent = DexGui55})',
-\t\`local savePlaceTopBtn = CreateInstance("TextButton",{Font=3,FontSize=5,Text="💾 Save Place",TextColor3=Color3.fromRGB(240,240,240),TextScaled=false,TextSize=11,TextStrokeColor3=Color3.new(0,0,0),TextStrokeTransparency=1,TextTransparency=0,TextWrapped=false,TextXAlignment=2,TextYAlignment=1,AutoButtonColor=true,Modal=false,Selected=false,Style=0,Active=true,AnchorPoint=Vector2.new(0,0),BackgroundColor3=Color3.fromRGB(35,85,155),BackgroundTransparency=0,BorderColor3=Color3.new(0,0,0),BorderSizePixel=0,ClipsDescendants=false,Draggable=false,Position=UDim2.new(1,-115,0,2),Rotation=0,Selectable=true,Size=UDim2.new(0,85,0,21),SizeConstraint=0,Visible=true,ZIndex=5,Name="SavePlaceBtn",Parent = DexGui55})
-\tlocal spc = Instance.new("UICorner") spc.CornerRadius = UDim.new(0, 4) spc.Parent = savePlaceTopBtn
-\tsavePlaceTopBtn.MouseButton1Click:Connect(function() f.savePlace({mode = "full", decompile = true, native = true}) end)
-\tlocal DexGui62 = CreateInstance("TextButton",{Font=3,FontSize=5,Text="",TextColor3=Color3.new(0.10588236153126,0.16470588743687,0.20784315466881),TextScaled=false,TextSize=14,TextStrokeColor3=Color3.new(0,0,0),TextStrokeTransparency=1,TextTransparency=0,TextWrapped=false,TextXAlignment=2,TextYAlignment=1,AutoButtonColor=true,Modal=false,Selected=false,Style=0,Active=true,AnchorPoint=Vector2.new(0,0),BackgroundColor3=Color3.new(0.21960785984993,0.21960785984993,0.21960785984993),BackgroundTransparency=1,BorderColor3=Color3.new(0.10588236153126,0.16470588743687,0.20784315466881),BorderSizePixel=0,ClipsDescendants=false,Draggable=false,Position=UDim2.new(1,-25,0,25),Rotation=0,Selectable=true,Size=UDim2.new(0,25,0,25),SizeConstraint=0,Visible=true,ZIndex=1,Name="Settings",Parent = DexGui55})\`
-);
-
-// 7. Fix folder expanding: ensure children are populated on expand + check children in NodeDraw`;
-
-remaster = remaster.replace(oldTopBarTarget, newTopBarInsert);
-
-fs.writeFileSync(remasterPath, remaster, 'utf8');
-console.log("Updated remaster_darkdex.js successfully!");
+console.log("Updated AethelDecompiler.lua successfully! Contains f.savePlace:", decompiler.includes('function f.savePlace'));
