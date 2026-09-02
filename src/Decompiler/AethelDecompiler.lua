@@ -255,6 +255,47 @@ function f.beautifyDecompiledSource(source, scriptInst)
 	source = source:gsub("currentRollId%s*=%s*currentRollId%s*%+%s*1%s*[\r\n]+%s*local%s+([uv]%d+)%s*=%s*currentRollId", "currentRollId = currentRollId + 1\n    local rollId = currentRollId")
 	source = source:gsub("if%s+currentRollId%s*~=%s*[uv]%d+%s+then", "if currentRollId ~= rollId then")
 
+	-- 7n. Tutorial & Quest Handler Dynamic Semantic Inference
+	for uVar in source:gmatch('local%s+([uv]%d+)%s*=%s*{%s*WalkAway%s*=') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "SIGNAL_ALIASES")
+	end
+	for uVar in source:gmatch('([uv]%d+)%s*=%s*workspace[%w_.:]*:WaitForChild%("SellNPC"%)') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "sellNPC")
+	end
+	for uVar in source:gmatch('([uv]%d+)%s*=%s*sellNPC:GetPivot%(%)') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "sellNPCPivot")
+	end
+	for uVar in source:gmatch('local%s+function%s+clearTouchConnection%(%)[^{]*if%s+([uv]%d+)%s+then%s*%1:Disconnect%(%)') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "touchConnection")
+	end
+	for uVar in source:gmatch('([uv]%d+)%s*=%s*MyServices:GetService%("UIModule"%)') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "uiModule")
+	end
+	for uVar in source:gmatch('([uv]%d+)%s*=%s*MyServices:GetService%("LocalPlayerUtils"%)') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "localPlayerUtils")
+	end
+	for uVar in source:gmatch('TutorialConfig%.GetStep%(([uv]%d+)%)') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "currentStep")
+	end
+	for uVar in source:gmatch('substeps%[([uv]%d+)%]') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "currentSubstep")
+	end
+	for uVar in source:gmatch('function%s+[%a_][%w_]*%.IsActive%([^\)]*%)%s*return%s+([uv]%d+)') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "isTutorialActive")
+	end
+	for uVar in source:gmatch('local%s+function%s+beginTutorial%(%)[^{]*if%s+([uv]%d+)%s+then%s*return%s*end%s*%1%s*=%s*true') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "tutorialStarted")
+	end
+	for uVar in source:gmatch('target%s*==%s*"SpawnedCraig"[^{]*return%s+([uv]%d+)') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "spawnedCraig")
+	end
+	for uVar in source:gmatch('([uv]%d+)%s*=%s*Animator:LoadAnimation%(CoreMovement%.IdleAnim%)') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "idleTrack")
+	end
+	for uVar in source:gmatch('local%s+function%s+getMoodletModule%(%)[^{]*if%s+([uv]%d+)%s+then%s*return%s*%1') do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", "cachedMoodletModule")
+	end
+
 	-- 8. Inverted Numeric & Value Comparison Normalization: (0.1 < var) -> (var > 0.1)
 	source = source:gsub("(%f[%w_]%d+%.?%d*)%s*(<)%s*([%a_][%w_.:]*)", "%3 > %1")
 	source = source:gsub("(%f[%w_]%d+%.?%d*)%s*(<=)%s*([%a_][%w_.:]*)", "%3 >= %1")
@@ -452,6 +493,21 @@ function f.beautifyDecompiledSource(source, scriptInst)
 		"local moodletSuccess, moodletModule = pcall(function()\n        return require(%1)\n    end)\n    local moodlet = moodletSuccess and moodletModule or nil")
 	source = source:gsub("if%s+u15%s+then%s*[\r\n]+%s*pcall%(function%(%)[%s\r\n]+u15%.SetLuckMoodlet%(",
 		"if moodlet then\n        pcall(function()\n            moodlet.SetLuckMoodlet(")
+
+	-- 12g. Dynamic Input & Service Helper Normalization
+	source = source:gsub("local%s+function%s+isTouch%(%).-return%s+[%a_][%w_]*%s*[\r\n]+%s*end",
+		"local function isTouch()\n    if not localPlayerUtils then return false end\n    local success, state = pcall(function()\n        return localPlayerUtils:GetState(\"TouchControls\")\n    end)\n    return success and state == true\nend")
+
+	if safeName and #safeName > 0 then
+		source = source:gsub("function%s+" .. safeName .. "%.Signal%(p1,%s*p2%)", "function " .. safeName .. ".Signal(self, signalName)")
+		source = source:gsub("function%s+" .. safeName .. "%.IsActive%(p1%)", "function " .. safeName .. ".IsActive(self)")
+		source = source:gsub("function%s+" .. safeName .. "%.GetStepIndex%(p1%)", "function " .. safeName .. ".GetStepIndex(self)")
+		source = source:gsub("function%s+" .. safeName .. "%.GetStepId%(p1%)", "function " .. safeName .. ".GetStepId(self)")
+		source = source:gsub("function%s+" .. safeName .. "%.Init%(p1%)", "function " .. safeName .. ".Init(self)")
+		source = source:gsub("function%s+" .. safeName .. "%.Finish%(p1%)", "function " .. safeName .. ".Finish(self)")
+		source = source:gsub("function%s+" .. safeName .. "%.IsPurchaseAllowed%(p1,%s*p2%)", "function " .. safeName .. ".IsPurchaseAllowed(self, item)")
+		source = source:gsub("function%s+" .. safeName .. "%.GetWrongItemMessage%(p1%)", "function " .. safeName .. ".GetWrongItemMessage(self)")
+	end
 
 	-- 13. Standard Math Map Function
 	source = source:gsub("local%s+function%s+map%(p1,%s*p2,%s*p3,%s*p4,%s*p5%)", "local function map(value, inMin, inMax, outMin, outMax)")
