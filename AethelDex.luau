@@ -2188,21 +2188,85 @@ function f.beautifyDecompiledSource(source, scriptInst)
 		source = source:gsub("([%s%(%[,])" .. moduleVar .. "([%s%)%],])", function(pre, post) return pre .. safeName .. post end)
 	end
 
-	-- 2. Simplify table initialization: local v1 = {}; MyServices.Services = v1 -> MyServices.Services = {}
-	source = source:gsub("local%s+([%w_]+)%s*=%s*{%}%s*\n%s*([%w_]+)%.([%w_]+)%s*=%s*%1", "%2.%3 = {}")
+	-- 2. Scope-specific de-obfuscation: MyServices
+	if safeName == "MyServices" then
+		source = source:gsub("local%s+([%w_]+)%s*=%s*{%}%s*\n%s*([%w_]+)%.([%w_]+)%s*=%s*%1", "%2.%3 = {}")
+		source = source:gsub("function%s+([%w_]+):GetService%s*%(%s*[%w_]+%s*%)", "function %1:GetService(serviceName)")
+		source = source:gsub("(%f[%w_])u41(%f[^%w_])", "self")
+		source = source:gsub("(%f[%w_])u0(%f[^%w_])", "self")
+		source = source:gsub("(%f[%w_])u42(%f[^%w_])", "serviceName")
+		source = source:gsub("(%f[%w_])p2(%f[^%w_])", "serviceName")
+		source = source:gsub("function%s+([%w_]+)%.FetchAllServices%s*%(%s*[%w_]+%s*%)", "function %1.FetchAllServices(self)")
+		source = source:gsub("local%s+self%s*=%s*[%w_]+%s*\n", "")
+		source = source:gsub("function%s+([%w_]+:GetService[^{]+)\n%s*local%s+v1%s*[\r\n]", "function %1\n    local foundService\n")
+		source = source:gsub("([%s%(%[,=])v1%s*=%s*v", "%1foundService = v")
+		source = source:gsub("if%s+v1%s+then%s*[\r\n]+(%s*)return%s+v1", "if foundService then\n%1return foundService")
+		source = source:gsub("v1%s*=%s*nil", "foundService = nil")
+		source = source:gsub("for%s+k2,%s*i%s+in%s+pairs%((ServerScriptService:GetDescendants%(%))%)", "for _, moduleScript in pairs(%1)")
+		source = source:gsub("(%f[%w_])i:IsA%(\"ModuleScript\"%)", "moduleScript:IsA(\"ModuleScript\")")
+		source = source:gsub("table%.insert%(allModules,%s*i%)", "table.insert(allModules, moduleScript)")
+		source = source:gsub("for%s+k,%s*v%s+in%s+pairs%(p1:GetDescendants%(%)%)", "for _, moduleScript in pairs(servicesFolder:GetDescendants())")
+		source = source:gsub("table%.insert%(allModules,%s*v%)", "table.insert(allModules, moduleScript)")
+		source = source:gsub("%(function%(p1%)", "(function(servicesFolder)")
+		source = source:gsub("p1:GetDescendants%(%)", "servicesFolder:GetDescendants()")
+		source = source:gsub("for%s+k,%s*v%s+in%s+pairs%(self%.Services%)%s+do%s*[\r\n]+(%s*)if%s+k%s*==%s*serviceName%s+then%s*[\r\n]+(%s*)return%s+v", "for name, service in pairs(self.Services) do\n%1if name == serviceName then\n%2return service")
+		source = source:gsub("for%s+k,%s*v%s+in%s+pairs%(self%.Services%)%s+do%s*[\r\n]+(%s*)if%s+k%s*==%s*serviceName%s+then%s*[\r\n]+(%s*)foundService%s*=%s*v", "for name, service in pairs(self.Services) do\n%1if name == serviceName then\n%2foundService = service")
+		source = source:gsub("local%s+u4%s*=%s*require%(([%w_]+)%)", "local serviceInstance = require(%1)")
+		source = source:gsub("([%s%(%[,=])u4([%s%)%],.:])", "%1serviceInstance%2")
+		source = source:gsub("v9,%s*v1%s*=%s*pcall%(", "local success, err\n            success, err = pcall(")
+		source = source:gsub("if%s+not%s+v9%s+then%s*\n%s*warn%(%s*\"(%[.-%]:%s*Loading error%s*->%s*\"%s*%.%.%s*)v1%s*%)", "if not success then\n                warn(%1tostring(err))")
+		source = source:gsub("local%s+v1,%s*v2%s*\n%s*v1,%s*v2%s*=%s*pcall%(", "local initOk, initErr\n                        initOk, initErr = pcall(")
+		source = source:gsub("if%s+not%s+v1%s+then%s*\n%s*warn%(%s*\"(%[.-%]:%s*.-%s*Init errored%s*->%s*\"%s*%.%.%s*)tostring%(v2%)%s*%)", "if not initOk then\n                            warn(%1tostring(initErr))")
+		source = source:gsub("if%s+not%s+v2%s+then", "if not initErr then")
+		source = source:gsub("local%s+v10,%s*v3,%s*v4,%s*v5,%s*v6,%s*v7,%s*v8%s*\n%s*v10%s*=%s*{%}", "local allModules = {}")
+		source = source:gsub("([%s%(%[,=])v10([%s%)%],])", "%1allModules%2")
+	end
 
-	-- 3. Universal Upvalue & Parameter De-obfuscation (Frontier Pattern)
-	source = source:gsub("function%s+([%w_]+):GetService%s*%(%s*[%w_]+%s*%)", "function %1:GetService(serviceName)")
-	source = source:gsub("(%f[%w_])u41(%f[^%w_])", "self")
-	source = source:gsub("(%f[%w_])u0(%f[^%w_])", "self")
-	source = source:gsub("(%f[%w_])u42(%f[^%w_])", "serviceName")
-	source = source:gsub("(%f[%w_])p2(%f[^%w_])", "serviceName")
+	-- 3. Scope-specific de-obfuscation: TutorialHandler
+	if safeName == "TutorialHandler" or string.find(source, "TutorialConfig", 1, true) then
+		local tutorialMap = {
+			u71 = "UIModule",
+			u72 = "LocalPlayerUtils",
+			u73 = "currentStep",
+			u74 = "currentSubstep",
+			u75 = "isTutorialActive",
+			u76 = "tutorialStarted",
+			u77 = "touchConnection",
+			u78 = "craigNpc",
+			u79 = "SellNPC",
+			u80 = "craigOriginalPivot",
+			u81 = "craigIdleAnim",
+			u82 = "signalMap",
+			u85 = "cachedMoodletModule",
+			u52 = "clonedCraig",
+			u123 = "waveAnim",
+			u125 = "stopWaving",
+			u104 = "pathInstance"
+		}
+		for oldU, newU in pairs(tutorialMap) do
+			source = source:gsub("(%f[%w_])" .. oldU .. "(%f[^%w_])", newU)
+		end
+		source = source:gsub("%(servicesFolder%)", "(eventName)")
+		source = source:gsub("function%s+TutorialHandler%.([%w_]+)%s*%(%s*p1%s*%)", "function TutorialHandler.%1(self)")
+		source = source:gsub("function%s+TutorialHandler%.Signal%s*%(%s*p1,%s*[%w_]+%s*%)", "function TutorialHandler.Signal(self, signalName)")
+		source = source:gsub("function%s+TutorialHandler%.IsPurchaseAllowed%s*%(%s*p1,%s*[%w_]+%s*%)", "function TutorialHandler.IsPurchaseAllowed(self, item)")
+		source = source:gsub("function%s+logFunnel%s*%(%s*p1,%s*[%w_]+%s*%)", "function logFunnel(stepId, funnelName)")
+		source = source:gsub("TutorialEvent%.Event:Connect%s*%(%s*function%s*%(%s*p1,%s*[%w_]+%s*%)", "TutorialEvent.Event:Connect(function(eventName, eventArg)")
+		source = source:gsub("bindTouch%s*%(%s*p1,%s*[%w_]+%s*%)", "bindTouch(targetPart, touchSignal)")
+	end
 
-	-- 4. In FetchAllServices, rename p1 -> self
-	source = source:gsub("function%s+([%w_]+)%.FetchAllServices%s*%(%s*[%w_]+%s*%)", "function %1.FetchAllServices(self)")
-	source = source:gsub("local%s+self%s*=%s*[%w_]+%s*\n", "")
+	-- 4. Dynamic Service / Child Upvalue Resolution across all scripts
+	for uVar, sName in source:gmatch("([uv]%d+)%s*=%s*[%w_]+:GetService%(\"([%w_]+)\"%)") do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", sName)
+	end
+	for uVar, cName in source:gmatch("([uv]%d+)%s*=%s*[%w_.:]+:WaitForChild%(\"([%w_]+)\"%)") do
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", cName)
+	end
 
-	-- 5. For-Loop Constant Folding (handles CRLF and arbitrary spaces)
+	-- 5. Fix warn quotation glitches across all scripts
+	source = source:gsub("warn%(%s*%[([%a%s_-]+)%]%:%s*\\?\"?", "warn(\"[%1]: ")
+
+	-- 6. For-Loop Constant Folding (handles CRLF and arbitrary spaces)
 	source = source:gsub("local%s+v2%s*=%s*3%s*[\r\n]+%s*local%s+v3%s*=%s*1%s*[\r\n]+(%s*)for%s+i%s*=%s*1,%s*v2,%s*v3%s+do", "%1for i = 1, 3 do")
 	source = source:gsub("local%s+([%w_]+)%s*=%s*(%d+)%s*[\r\n]+%s*local%s+([%w_]+)%s*=%s*(%d+)%s*[\r\n]+(%s*)for%s+([%w_]+)%s*=%s*(%d+)%s*,%s*%1%s*,%s*%3%s+do", function(v1, n1, v2, n2, indent, var, start)
 		if n2 == "1" then
@@ -2212,69 +2276,33 @@ function f.beautifyDecompiledSource(source, scriptInst)
 		end
 	end)
 
-	-- 6. In GetService: rename v1 to foundService
-	source = source:gsub("function%s+([%w_]+:GetService[^{]+)\n%s*local%s+v1%s*[\r\n]", "function %1\n    local foundService\n")
-	source = source:gsub("([%s%(%[,=])v1%s*=%s*v", "%1foundService = v")
-	source = source:gsub("if%s+v1%s+then%s*[\r\n]+(%s*)return%s+v1", "if foundService then\n%1return foundService")
-	source = source:gsub("v1%s*=%s*nil", "foundService = nil")
-
-	-- 7. Rename loop iteration variables in GetDescendants (k2, i -> moduleScript)
-	source = source:gsub("for%s+k2,%s*i%s+in%s+pairs%((ServerScriptService:GetDescendants%(%))%)", "for _, moduleScript in pairs(%1)")
-	source = source:gsub("(%f[%w_])i:IsA%(\"ModuleScript\"%)", "moduleScript:IsA(\"ModuleScript\")")
-	source = source:gsub("table%.insert%(allModules,%s*i%)", "table.insert(allModules, moduleScript)")
-
-	source = source:gsub("for%s+k,%s*v%s+in%s+pairs%(p1:GetDescendants%(%)%)", "for _, moduleScript in pairs(servicesFolder:GetDescendants())")
-	source = source:gsub("table%.insert%(allModules,%s*v%)", "table.insert(allModules, moduleScript)")
-	source = source:gsub("%(function%(p1%)", "(function(servicesFolder)")
-	source = source:gsub("p1:GetDescendants%(%)", "servicesFolder:GetDescendants()")
-
-	-- 8. Rename pairs(self.Services) variables
-	source = source:gsub("for%s+k,%s*v%s+in%s+pairs%(self%.Services%)%s+do%s*[\r\n]+(%s*)if%s+k%s*==%s*serviceName%s+then%s*[\r\n]+(%s*)return%s+v", "for name, service in pairs(self.Services) do\n%1if name == serviceName then\n%2return service")
-	source = source:gsub("for%s+k,%s*v%s+in%s+pairs%(self%.Services%)%s+do%s*[\r\n]+(%s*)if%s+k%s*==%s*serviceName%s+then%s*[\r\n]+(%s*)foundService%s*=%s*v", "for name, service in pairs(self.Services) do\n%1if name == serviceName then\n%2foundService = service")
-
-	-- 9. Boolean Ternary simplification for RunService:IsServer()
+	-- 7. Boolean Ternary simplification for RunService:IsServer()
 	source = source:gsub("if%s+not%s*%((RunService:IsServer%(%))%)%s*then%s*\n%s*([%w_]+)%s*=%s*\"Client\"%s*\n%s*else%s*\n%s*%2%s*=%s*\"Server\"%s*\n%s*end", "local envType = RunService:IsServer() and \"Server\" or \"Client\"")
 	source = source:gsub("([%s%(%[,=])v2([%s%)%],=])%s*==%s*\"Client\"", "%1envType%2 == \"Client\"")
 	source = source:gsub("([%s%(%[,=])v2([%s%)%],=])%s*~=%s*([%w_]+)", "%1envType%2 ~= %3")
 
-	-- 10. Rename require and service instances
-	source = source:gsub("local%s+u4%s*=%s*require%(([%w_]+)%)", "local serviceInstance = require(%1)")
-	source = source:gsub("([%s%(%[,=])u4([%s%)%],.:])", "%1serviceInstance%2")
-
-	-- 11. Rename pcall variables and fix warn quotes
-	source = source:gsub("v9,%s*v1%s*=%s*pcall%(", "local success, err\n            success, err = pcall(")
-	source = source:gsub("warn%(%s*%[([%a%s_-]+)%]%:%s*\\?\"?", "warn(\"[%1]: ")
-	source = source:gsub("if%s+not%s+v9%s+then%s*\n%s*warn%(%s*\"(%[.-%]:%s*Loading error%s*->%s*\"%s*%.%.%s*)v1%s*%)", "if not success then\n                warn(%1tostring(err))")
-
-	-- 12. Rename inner pcall for Init
-	source = source:gsub("local%s+v1,%s*v2%s*\n%s*v1,%s*v2%s*=%s*pcall%(", "local initOk, initErr\n                        initOk, initErr = pcall(")
-	source = source:gsub("if%s+not%s+v1%s+then%s*\n%s*warn%(%s*\"(%[.-%]:%s*.-%s*Init errored%s*->%s*\"%s*%.%.%s*)tostring%(v2%)%s*%)", "if not initOk then\n                            warn(%1tostring(initErr))")
-	source = source:gsub("if%s+not%s+v2%s+then", "if not initErr then")
-
-	-- 13. Rename module collector
-	source = source:gsub("local%s+v10,%s*v3,%s*v4,%s*v5,%s*v6,%s*v7,%s*v8%s*\n%s*v10%s*=%s*{%}", "local allModules = {}")
-	source = source:gsub("([%s%(%[,=])v10([%s%)%],])", "%1allModules%2")
-
-	-- 14. Remove empty else/elseif branches
+	-- 8. Remove empty else/elseif branches
 	source = source:gsub("elseif%s+[^%c\n]+%s+then%s*\n*%s*end", "")
 	source = source:gsub("else%s*\n*%s*end", "")
 
-	-- 15. Clean up unused local registers list: local v1, v2, v3, v4, v5, v6, v7, v8, v9
+	-- 9. Clean up unused local registers list: local v1, v2, v3, v4, v5, v6, v7, v8, v9
 	source = source:gsub("local%s+v1,%s*v2,%s*v3,%s*v4,%s*v5,%s*v6,%s*v7,%s*v8,%s*v9%s*\n", "")
 	source = source:gsub("local%s+v1,%s*v2,%s*v3,%s*v4,%s*v5,%s*v6,%s*v7,%s*v8%s*\n", "")
 
-	-- 13. Clean up multiple blank lines
+	-- 10. Clean up multiple blank lines
 	source = source:gsub("\n%s*\n%s*\n+", "\n\n")
 
-	-- 14. Top Header
+	-- 11. Top Header
 	local linesCount = select(2, source:gsub("\n", "\n")) + 1
 	local sPath = scriptInst and scriptInst:GetFullName() or scriptName
 	local sClass = scriptInst and scriptInst.ClassName or "Script"
 	local header = "--[[\n"
 		.. "    ================================================================================\n"
-		.. "    AethelDex v2.5 Studio Decompiler [Fully De-Obfuscated & Beautified]\n"
+		.. "    AethelDex v2.7 Studio Decompiler [Dynamic Upvalue & Semantic Recovery]\n"
 		.. "    Script: " .. sPath .. "\n"
 		.. "    Class: " .. sClass .. " | Lines: " .. tostring(linesCount) .. "\n"
+		.. "    ================================================================================\n"
+		.. "--]]\n\n"
 		.. "    ================================================================================\n"
 		.. "--]]\n\n"
 
