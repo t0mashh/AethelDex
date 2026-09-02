@@ -219,12 +219,28 @@ function f.beautifyDecompiledSource(source, scriptInst)
 		source = source:gsub("if%s+p1%.Parent%s*~=%s*LocalPlayer%.Character%s+then", "if hitPart.Parent ~= LocalPlayer.Character then")
 		source = source:gsub("TutorialHandler:Signal%(p2%s+or%s+\"Touch\"%)", "TutorialHandler:Signal(touchSignal or \"Touch\")")
 
-		-- Other functions
-		source = source:gsub("local%s+function%s+resolvePointerTarget%s*%(%s*p1%s*%)", "local function resolvePointerTarget(targetConfig)")
-		source = source:gsub("local%s+function%s+resolveHighlight%s*%(%s*p1%s*%)", "local function resolveHighlight(highlightFn)")
+		-- Other functions parameter bodies
 		source = source:gsub("local%s+function%s+setMoodletsEnabled%s*%(%s*p1%s*%)", "local function setMoodletsEnabled(isEnabled)")
+		source = source:gsub("v1%.SetEnabled%(p1%)", "v1.SetEnabled(isEnabled)")
+
+		source = source:gsub("local%s+function%s+resolvePointerTarget%s*%(%s*p1%s*%)", "local function resolvePointerTarget(targetConfig)")
+		source = source:gsub("if%s+not%s+p1%s+then%s*\n%s*return%s+nil%s*\n%s*end%s*\n%s*if%s+p1%.mode%s*==%s*\"BuiltInArrow\"%s+then%s*\n%s*return%s+TutorialConfig%.GuiTargets%[p1%.target%]%s*\n%s*end%s*\n%s*if%s+p1%.resolve%s+then%s*\n%s*return%s+p1%.resolve%(%)%s*\n%s*end%s*\n%s*if%s+p1%.target%s*==%s*\"SpawnedCraig\"%s+then", "if not targetConfig then\n        return nil\n    end\n    if targetConfig.mode == \"BuiltInArrow\" then\n        return TutorialConfig.GuiTargets[targetConfig.target]\n    end\n    if targetConfig.resolve then\n        return targetConfig.resolve()\n    end\n    if targetConfig.target == \"SpawnedCraig\" then")
+
+		source = source:gsub("local%s+function%s+resolveHighlight%s*%(%s*p1%s*%)", "local function resolveHighlight(highlightFn)")
+		source = source:gsub("if%s+not%s+p1%s+then%s*\n%s*return%s+nil%s*\n%s*end%s*\n%s*if%s+type%(p1%)%s*==%s*\"function\"%s+then%s*\n%s*return%s+p1%(%)", "if not highlightFn then\n        return nil\n    end\n    if type(highlightFn) == \"function\" then\n        return highlightFn()")
+
 		source = source:gsub("local%s+function%s+enterStep%s*%(%s*p1%s*%)", "local function enterStep(stepIndex)")
+		source = source:gsub("TutorialConfig%.GetStep%(p1%)", "TutorialConfig.GetStep(stepIndex)")
+		source = source:gsub("currentStep%s*=%s*p1", "currentStep = stepIndex")
+		source = source:gsub("if%s+v2%.funnel%s+and%s+p1%s+then", "if v2.funnel and stepIndex then")
+		source = source:gsub("TutorialServerEvent:FireServer%(\"Funnel\",%s*p1%)", "TutorialServerEvent:FireServer(\"Funnel\", stepIndex)")
+		source = source:gsub("StepToStage%[p1%]", "StepToStage[stepIndex]")
+
 		source = source:gsub("local%s+function%s+craigWalkAway%s*%(%s*p1%s*%)", "local function craigWalkAway(npc)")
+		source = source:gsub("local%s+v1%s*=%s*p1\n%s*if%s+not%s+v1%s+then\n%s*v1%s*=%s*craigNpc", "local v1 = npc\n    if not v1 then\n        v1 = craigNpc")
+
+		source = source:gsub("TutorialHandler:Signal%(eventName%)%s*\n%s*end%)%s*\n%s*self%.Initialized", "TutorialHandler:Signal(serverEvent)\n    end)\n    self.Initialized")
+		source = source:gsub("if%s+not%s+p1%s+then%s*\n%s*return%s*\n%s*end%s*\n%s*local%s+Parent%s*=%s*nil", "if not targetPart then\n        return\n    end\n    local Parent = nil")
 	end
 
 	-- 4. Dynamic Service / Child Upvalue Resolution across all scripts
