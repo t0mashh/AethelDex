@@ -245,9 +245,22 @@ function f.beautifyDecompiledSource(source, scriptInst)
 		source = source:gsub("TutorialHandler:Signal%(eventName%)%s*\n%s*end%)%s*\n%s*self%.Initialized", "TutorialHandler:Signal(serverEvent)\n    end)\n    self.Initialized")
 		source = source:gsub("if%s+not%s+p1%s+then%s*\n%s*return%s*\n%s*end%s*\n%s*local%s+Parent%s*=%s*nil", "if not targetPart then\n        return\n    end\n    local Parent = nil")
 
+		-- Clean up craigWalkAway target NPC
+		source = source:gsub("local%s+v1%s*=%s*npc\n%s*if%s+not%s+v1%s+then\n%s*v1%s*=%s*craigNpc\n%s*end\n%s*local%s+v2%s*=%s*v1", "local targetNpc = npc or craigNpc")
+		source = source:gsub("(%f[%w_])v2(%f[^%w_])", "targetNpc")
+
+		-- Clean up isTouch()
+		source = source:gsub("local%s+function%s+isTouch%([^)]+%)%s*\n%s*local%s+v1,%s*v2,%s*v3%s*\n%s*if%s+not%s+LocalPlayerUtils%s+then%s*\n%s*return%s+false%s*\n%s*end%s*\n%s*v1,%s*v2%s*=%s*pcall%([^)]+%)%s*\n%s*if%s+not%s+v1%s+then%s*\n%s*v3%s*=%s*false%s*\n%s*else%s*\n%s*v3%s*=%s*v2%s*\n%s*if%s+not%s+v3%s+then%s*\n%s*v3%s*=%s*false%s*\n%s*end%s*\n%s*end%s*\n%s*return%s+v3",
+			"local function isTouch()\n    if not LocalPlayerUtils then\n        return false\n    end\n    local ok, isTouchControls = pcall(function()\n        return LocalPlayerUtils:GetState(\"TouchControls\")\n    end)\n    return ok and not not isTouchControls")
+
+		-- Clean up render() entry data resolution
+		source = source:gsub("local%s+stepData,%s*v1,%s*v2,%s*v3,%s*v4%s*\n%s*local%s+v5%s*=%s*TutorialConfig%.GetStep%(currentStep%)%s*\n%s*if%s+not%s+v5%s+then%s*\n%s*stepData%s*=%s*nil%s*\n%s*v1%s*=%s*nil%s*\n%s*elseif%s+not%s+v5%.substeps%s+then%s*\n%s*stepData%s*=%s*v5%s*\n%s*v1%s*=%s*nil%s*\n%s*elseif%s+0%s*<%s*currentSubstep%s+then%s*\n%s*stepData%s*=%s*v5%s*\n%s*v1%s*=%s*v5%.substeps%[currentSubstep%]%s*\n%s*end%s*\n%s*if%s+not%s+stepData%s+then%s*\n%s*return%s*\n%s*end%s*\n%s*local%s+activeEntry%s*=%s*v1%s+or%s+stepData",
+			"local stepConfig = TutorialConfig.GetStep(currentStep)\n    local stepData, substepData\n    if not stepConfig then\n        stepData = nil\n        substepData = nil\n    elseif not stepConfig.substeps then\n        stepData = stepConfig\n        substepData = nil\n    elseif 0 < currentSubstep then\n        stepData = stepConfig\n        substepData = stepConfig.substeps[currentSubstep]\n    end\n    if not stepData then\n        return\n    end\n    local activeEntry = substepData or stepData")
+
 		-- Clean up remaining comment parameters in TutorialHandler
 		source = source:gsub("p2%s*%(val%)", "touchSignal (val)")
 		source = source:gsub("p1%s*%(val%)", "stepIndex (val)")
+		source = source:gsub("TutorialServerEvent%s*%(upval%),%s*touchSignal%s*%(val%)", "TutorialServerEvent (upval), funnelName (val)")
 	end
 
 	-- 4. Dynamic Service / Child Upvalue Resolution across all scripts
