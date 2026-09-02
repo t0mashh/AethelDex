@@ -2238,6 +2238,9 @@ function f.beautifyDecompiledSource(source, scriptInst)
 			u81 = "craigIdleAnim",
 			u82 = "signalMap",
 			u85 = "cachedMoodletModule",
+			u14 = "stepData",
+			u18 = "activeEntry",
+			u87 = "hasPointer",
 			u52 = "clonedCraig",
 			u123 = "waveAnim",
 			u125 = "stopWaving",
@@ -2308,6 +2311,10 @@ function f.beautifyDecompiledSource(source, scriptInst)
 
 		source = source:gsub("TutorialHandler:Signal%(eventName%)%s*\n%s*end%)%s*\n%s*self%.Initialized", "TutorialHandler:Signal(serverEvent)\n    end)\n    self.Initialized")
 		source = source:gsub("if%s+not%s+p1%s+then%s*\n%s*return%s*\n%s*end%s*\n%s*local%s+Parent%s*=%s*nil", "if not targetPart then\n        return\n    end\n    local Parent = nil")
+
+		-- Clean up remaining comment parameters in TutorialHandler
+		source = source:gsub("p2%s*%(val%)", "touchSignal (val)")
+		source = source:gsub("p1%s*%(val%)", "stepIndex (val)")
 	end
 
 	-- 4. Dynamic Service / Child Upvalue Resolution across all scripts
@@ -2353,11 +2360,9 @@ function f.beautifyDecompiledSource(source, scriptInst)
 	local sClass = scriptInst and scriptInst.ClassName or "Script"
 	local header = "--[[\n"
 		.. "    ================================================================================\n"
-		.. "    AethelDex v2.7 Studio Decompiler [Dynamic Upvalue & Semantic Recovery]\n"
+		.. "    AethelDex v3.0 Studio Decompiler [Semantic Upvalue & Clean Parameter Engine]\n"
 		.. "    Script: " .. sPath .. "\n"
 		.. "    Class: " .. sClass .. " | Lines: " .. tostring(linesCount) .. "\n"
-		.. "    ================================================================================\n"
-		.. "--]]\n\n"
 		.. "    ================================================================================\n"
 		.. "--]]\n\n"
 
