@@ -750,6 +750,2206 @@ end
 return TutorialHandler]=]
 	end
 
+	-- 4. Scope-specific de-obfuscation: AssetPreloader
+	if safeName == "AssetPreloader" or string.find(source, "PreloadAnimations", 1, true) then
+		source = [=[local ContentProvider = game:GetService("ContentProvider")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local SoundService = game:GetService("SoundService")
+local Players = game:GetService("Players")
+
+local MyServices = ReplicatedStorage:WaitForChild("MyServices")
+require(MyServices:WaitForChild("MyServices"))
+
+local Services = MyServices:WaitForChild("Services")
+local Global = Services:WaitForChild("Global")
+local ClothingModule = require(Global:WaitForChild("ClothingModule"))
+
+local AssetPreloader = {}
+
+function AssetPreloader.PreloadAnimations()
+    local LocalPlayer = Players.LocalPlayer
+    local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local Humanoid = Character:WaitForChild("Humanoid")
+    local Animator = Humanoid:FindFirstChildOfClass("Animator") or Humanoid:WaitForChild("Animator")
+    local Animations = ReplicatedStorage:WaitForChild("Animations")
+
+    for _, anim in ipairs(Animations:GetDescendants()) do
+        if anim:IsA("Animation") then
+            Animator:LoadAnimation(anim)
+        end
+    end
+end
+
+local function collectGuiImages(container, assetList)
+    for _, guiElement in ipairs(container:GetDescendants()) do
+        if guiElement:IsA("ImageLabel") then
+            if guiElement.Image and guiElement.Image ~= "" then
+                table.insert(assetList, guiElement)
+            end
+        elseif guiElement:IsA("VideoFrame") and guiElement.Video and guiElement.Video ~= "" then
+            table.insert(assetList, guiElement)
+        end
+    end
+end
+
+function AssetPreloader.Init()
+    game.Loaded:Wait()
+    local PlayerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+    local assetsToPreload = {}
+
+    for _, sound in ipairs(SoundService:GetDescendants()) do
+        if sound:IsA("Sound") then
+            table.insert(assetsToPreload, sound)
+        end
+    end
+
+    for _, item in pairs(ClothingModule.Items) do
+        if item.itemIcon then
+            table.insert(assetsToPreload, item.itemIcon)
+        end
+        if item.itemBackground then
+            table.insert(assetsToPreload, item.itemBackground)
+        end
+    end
+
+    collectGuiImages(PlayerGui, assetsToPreload)
+    ContentProvider:PreloadAsync(assetsToPreload)
+    AssetPreloader.PreloadAnimations()
+
+    return true
+end
+
+return AssetPreloader]=]
+	end
+
+	-- 5. Scope-specific de-obfuscation: BackpackModule
+	if safeName == "BackpackModule" or string.find(source, "System_MorieliCard", 1, true) or string.find(source, "FromInventoryToHotbar", 1, true) then
+		source = [=[local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
+local HttpService = game:GetService("HttpService")
+local SoundService = game:GetService("SoundService")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local BackpackGUI = PlayerGui:WaitForChild("BackpackGUI")
+local UI_SFX = SoundService:WaitForChild("UI_SFX")
+
+local GlobalServices = ReplicatedStorage:WaitForChild("MyServices"):WaitForChild("Services"):WaitForChild("Global")
+local DetergentModule = require(GlobalServices:WaitForChild("DetergentModule"))
+local MatchaItems = require(GlobalServices:WaitForChild("MatchaItems"))
+local Furnitures = require(GlobalServices:WaitForChild("Furnitures"))
+local ClothingModule = require(GlobalServices:WaitForChild("ClothingModule"))
+local EnumClothes = require(GlobalServices:WaitForChild("ClothingModule"):WaitForChild("EnumClothes"))
+
+local ClientServices = ReplicatedStorage.MyServices.Services.Client
+require(ClientServices:WaitForChild("LocalPlayerUtils"))
+local IndexModule = require(ClientServices:WaitForChild("UIModule"):WaitForChild("IndexModule"))
+
+local Events = ReplicatedStorage:WaitForChild("Events")
+local InventoryEvent = Events:WaitForChild("DataEvents"):WaitForChild("InventoryEvent")
+local AnnouncementEvent = Events:WaitForChild("CharacterEvents"):WaitForChild("AnnouncementEvent")
+local UIEvents = Events:WaitForChild("UIEvents")
+local PhoneUI = UIEvents:WaitForChild("PhoneUI")
+
+local InventoryTemplates = ReplicatedStorage:WaitForChild("UI_Templates"):WaitForChild("Inventory")
+local ItemSlotTemplate = InventoryTemplates:WaitForChild("ItemSlot")
+local HotbarItemSlotTemplate = InventoryTemplates:WaitForChild("HotbarItemSlot")
+local EmptyHotbarItemSlotTemplate = InventoryTemplates:WaitForChild("EmptyHotbarItemSlot")
+local CategoryButtonTemplate = InventoryTemplates:WaitForChild("CategoryButton")
+
+local BackpackModule = {}
+
+local POD_NAMES = {
+    GoldPod = "Gold",
+    PhoenixPod = "Phoenix",
+    AmethystPod = "Amethyst",
+    SupremeDetergent = "Supreme"
+}
+
+local POD_COLORS = {
+    GoldPod = Color3.fromRGB(255, 200, 50),
+    PhoenixPod = Color3.fromRGB(255, 100, 30),
+    AmethystPod = Color3.fromRGB(170, 80, 255),
+    SupremeDetergent = Color3.fromRGB(220, 220, 255)
+}
+
+local inventoryState = {
+    Hotbar = {
+        System_Phone = {
+            ItemKey = "Phone",
+            Type = "System",
+            Image = "rbxassetid://71817873866777",
+            Description = {"Misc. features"},
+            InstanceId = "System_Phone",
+            SlotNum = 1,
+            Color = Color3.fromRGB(135, 199, 255),
+        },
+        System_Index = {
+            ItemKey = "Index",
+            Type = "System",
+            Image = "rbxassetid://111399411578271",
+            Description = {"More info here!"},
+            InstanceId = "System_Index",
+            SlotNum = 2,
+            Color = Color3.fromRGB(135, 199, 255),
+        },
+        System_Umbrella = {
+            ItemKey = "Umbrella",
+            Type = "System",
+            Image = "rbxassetid://76566468170887",
+            Description = {"umbrella ultra pro max 1060ti"},
+            InstanceId = "System_Umbrella",
+            SlotNum = 3,
+            Color = Color3.fromRGB(64, 255, 198),
+        },
+    },
+    Backpack = {},
+}
+
+local MAX_HOTBAR_SLOTS = 10
+local isTouchEnabled = not UserInputService.MouseEnabled and UserInputService.TouchEnabled
+local savedHotbarLayout = {}
+local isSaveQueued = false
+
+local function IsSystemKey(key)
+    return type(key) == "string" and key:match("^System_") ~= nil
+end
+
+local function LoadSavedLayout()
+    local layoutAttr = LocalPlayer:GetAttribute("HotbarLayout")
+    if type(layoutAttr) ~= "string" or layoutAttr == "" then
+        return
+    end
+
+    local success, decoded = pcall(function()
+        return HttpService:JSONDecode(layoutAttr)
+    end)
+
+    if not success or type(decoded) ~= "table" then
+        return
+    end
+
+    table.clear(savedHotbarLayout)
+    for key, slot in pairs(decoded) do
+        if type(key) == "string" and type(slot) == "number" then
+            savedHotbarLayout[key] = math.floor(slot)
+        end
+    end
+end
+
+local function PushLayout()
+    local layoutCopy = {}
+    for key, slot in pairs(savedHotbarLayout) do
+        layoutCopy[key] = slot
+    end
+    InventoryEvent:FireServer("SaveHotbarLayout", HttpService:JSONEncode(layoutCopy))
+end
+
+local function QueueLayoutSave()
+    if isSaveQueued then
+        return
+    end
+    isSaveQueued = true
+    task.delay(2, function()
+        isSaveQueued = false
+        pcall(PushLayout)
+    end)
+end
+
+local function RecordSlot(key, slotNum)
+    if type(key) ~= "string" then
+        return
+    end
+    local targetSlot = (type(slotNum) == "number") and slotNum or 0
+    if savedHotbarLayout[key] == targetSlot then
+        return
+    end
+    savedHotbarLayout[key] = targetSlot
+    QueueLayoutSave()
+end
+
+local function SlotTaken(slotNum)
+    for _, item in pairs(inventoryState.Hotbar) do
+        if item.SlotNum == slotNum then
+            return true
+        end
+    end
+    return false
+end
+
+local function SlotReservedByOther(slotNum, key)
+    for otherKey, reservedSlot in pairs(savedHotbarLayout) do
+        if otherKey ~= key and reservedSlot == slotNum and not inventoryState.Hotbar[otherKey] and not inventoryState.Backpack[otherKey] then
+            return true
+        end
+    end
+    return false
+end
+
+local function GetFirstUnreservedSlot(key)
+    local firstFree = nil
+    for slotIndex = 1, MAX_HOTBAR_SLOTS do
+        local isOccupied = false
+        for _, item in pairs(inventoryState.Hotbar) do
+            if item.SlotNum == slotIndex then
+                isOccupied = true
+                break
+            end
+        end
+        if not isOccupied then
+            if not firstFree then
+                firstFree = slotIndex
+            end
+            if not SlotReservedByOther(slotIndex, key) then
+                return slotIndex
+            end
+        end
+    end
+    return firstFree
+end
+
+local function PruneLayout()
+    local removedCount = 0
+    for key in pairs(savedHotbarLayout) do
+        if not inventoryState.Hotbar[key] and not inventoryState.Backpack[key] then
+            savedHotbarLayout[key] = nil
+            removedCount = removedCount + 1
+        end
+    end
+    if removedCount > 0 then
+        QueueLayoutSave()
+    end
+end
+
+local CATEGORIES = {
+    {
+        All = (function()
+            local list = {}
+            for _, clothType in pairs(EnumClothes.Type) do
+                table.insert(list, clothType)
+            end
+            table.insert(list, "Detergents")
+            table.insert(list, "MatchaItems")
+            table.insert(list, "System")
+            table.insert(list, "Decorations")
+            return list
+        end)()
+    },
+    {
+        Clothes = {
+            EnumClothes.Type.Shirt,
+            EnumClothes.Type.InnerLayerTop,
+            EnumClothes.Type.OuterLayerTop,
+            EnumClothes.Type.Pants,
+            EnumClothes.Type.Shoes,
+        }
+    },
+    {
+        Accessories = {
+            EnumClothes.Type.Accessory,
+            EnumClothes.Type.Backpack
+        }
+    },
+    {
+        Items = {
+            "MatchaItems",
+            "Decorations",
+            "Detergents"
+        }
+    },
+    {
+        Favorites = {
+            "Favorites"
+        }
+    }
+}
+
+local currentCategory = ""
+local activeEquippedItemId = ""
+local isInventoryOpen = false
+
+local InventoryFrame = BackpackGUI.Backpack.Inventory
+local DeleteConfirmationFrame = InventoryFrame.DeleteConfirmationFrame
+local HotbarFrame = BackpackGUI.Backpack.Hotbar
+local SearchFrame = InventoryFrame.HolderFrame.SearchFrame
+local InventoryScroll = InventoryFrame.HolderFrame.ScrollFrame.InventoryScroll
+local CategoriesFrame = InventoryFrame.HolderFrame.CategoriesFrame
+
+local function GetHotbarSize()
+    local count = 0
+    for _ in pairs(inventoryState.Hotbar) do
+        count = count + 1
+    end
+    return count
+end
+
+local function ShowFreeSpaces()
+    while HotbarFrame.LayoutContainer:FindFirstChild("EmptyHotbarItemSlot") do
+        HotbarFrame.LayoutContainer.EmptyHotbarItemSlot:Destroy()
+    end
+
+    if GetHotbarSize() >= MAX_HOTBAR_SLOTS then
+        return
+    end
+
+    local freeSlots = {}
+    for slot = 1, MAX_HOTBAR_SLOTS do
+        table.insert(freeSlots, slot)
+    end
+
+    for _, item in pairs(inventoryState.Hotbar) do
+        if item.SlotNum then
+            local idx = table.find(freeSlots, item.SlotNum)
+            if idx then
+                table.remove(freeSlots, idx)
+            end
+        end
+    end
+
+    for _, slotNum in ipairs(freeSlots) do
+        local emptySlot = EmptyHotbarItemSlotTemplate:Clone()
+        emptySlot.LayoutOrder = slotNum
+        emptySlot.HotbarNumber.Text = tostring(slotNum % 10)
+        emptySlot:SetAttribute("ItemId", "EmptyHotbarItemSlot")
+
+        local uiScale = emptySlot:FindFirstChildOfClass("UIScale")
+        if isTouchEnabled and uiScale then
+            uiScale.Scale = 0.75
+        end
+
+        emptySlot.Parent = HotbarFrame.LayoutContainer
+
+        local childConn
+        childConn = HotbarFrame.LayoutContainer.ChildAdded:Connect(function(child)
+            if child.LayoutOrder == slotNum then
+                emptySlot:Destroy()
+                if childConn then
+                    childConn:Disconnect()
+                end
+            end
+        end)
+
+        emptySlot.Activated:Connect(function()
+            if activeEquippedItemId ~= "" then
+                BackpackModule.FromInventoryToHotbar(activeEquippedItemId, slotNum)
+            end
+        end)
+
+        emptySlot.Destroying:Connect(function()
+            if childConn then
+                childConn:Disconnect()
+            end
+        end)
+    end
+end
+
+local function OpenInventory()
+    isInventoryOpen = true
+    LocalPlayer:SetAttribute("InventoryOpen", true)
+    LocalPlayer:SetAttribute("DisableCamera", true)
+
+    UI_SFX.ClickOpen:Play()
+    InventoryFrame.Visible = true
+    HotbarFrame.DefLabel.Visible = false
+
+    local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Sine)
+    TweenService:Create(HotbarFrame.Arrow, tweenInfo, {Rotation = 0}):Play()
+    TweenService:Create(workspace.CurrentCamera, tweenInfo, {FieldOfView = 50}):Play()
+    TweenService:Create(BackpackGUI.Background, tweenInfo, {BackgroundTransparency = 0.65}):Play()
+
+    ShowFreeSpaces()
+end
+
+local function CloseInventory()
+    if InventoryFrame.Visible then
+        UI_SFX.ClickClose:Play()
+    end
+
+    isInventoryOpen = false
+    LocalPlayer:SetAttribute("InventoryOpen", false)
+    LocalPlayer:SetAttribute("DisableCamera", false)
+
+    local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Sine)
+    TweenService:Create(BackpackGUI.Background, tweenInfo, {BackgroundTransparency = 1}):Play()
+    TweenService:Create(HotbarFrame.Arrow, tweenInfo, {Rotation = 180}):Play()
+
+    while HotbarFrame.LayoutContainer:FindFirstChild("EmptyHotbarItemSlot") do
+        HotbarFrame.LayoutContainer.EmptyHotbarItemSlot:Destroy()
+    end
+
+    InventoryFrame.Visible = false
+    HotbarFrame.DefLabel.Visible = true
+end
+
+local function ClearInventory()
+    for _, child in ipairs(InventoryScroll:GetChildren()) do
+        if child:IsA("ImageButton") then
+            child:Destroy()
+        end
+    end
+end
+
+local function GetCategoryData(categoryName)
+    for _, catMap in pairs(CATEGORIES) do
+        local name, data = next(catMap)
+        if name == categoryName then
+            return data
+        end
+    end
+    return nil
+end
+
+local function GetItemsByCategory(categoryName)
+    local allowedTypes = GetCategoryData(categoryName)
+    if not allowedTypes then
+        return {}
+    end
+
+    local items = {}
+    for itemId, item in pairs(inventoryState.Backpack) do
+        if categoryName == "Favorites" then
+            if item.Favorite then
+                items[itemId] = item
+            end
+        elseif item.Type == "MRKETBox" or table.find(allowedTypes, item.Type) then
+            items[itemId] = item
+        end
+    end
+    return items
+end
+
+local function sortChildren()
+    local itemSlots = {}
+    for _, child in ipairs(InventoryScroll:GetChildren()) do
+        if child:IsA("ImageButton") then
+            table.insert(itemSlots, child)
+        end
+    end
+
+    table.sort(itemSlots, function(a, b)
+        local typeA = (a:GetAttribute("Type") or ""):lower()
+        local typeB = (b:GetAttribute("Type") or ""):lower()
+        if typeA ~= typeB then
+            return typeA < typeB
+        end
+        local keyA = (a:GetAttribute("ItemKey") or ""):lower()
+        local keyB = (b:GetAttribute("ItemKey") or ""):lower()
+        return keyA < keyB
+    end)
+
+    for orderIndex, slot in ipairs(itemSlots) do
+        slot.LayoutOrder = orderIndex
+    end
+end
+
+local function GetFirstEmptySlot()
+    local available = {}
+    for slot = 1, MAX_HOTBAR_SLOTS do
+        table.insert(available, slot)
+    end
+    for _, item in pairs(inventoryState.Hotbar) do
+        local idx = table.find(available, item.SlotNum)
+        if idx then
+            table.remove(available, idx)
+        end
+    end
+    return available[1]
+end
+
+local function GetReplaceableHotbarItem()
+    for itemId, item in pairs(inventoryState.Hotbar) do
+        if item.Type ~= "System" and type(item.SlotNum) == "number" then
+            return itemId, item.SlotNum
+        end
+    end
+    return nil, nil
+end
+
+local function setUpItemSlot(slotButton, itemId)
+    slotButton.Activated:Connect(function()
+        if DeleteConfirmationFrame.Visible then
+            return
+        end
+
+        local itemData = inventoryState.Backpack[itemId]
+        if not itemData then
+            return
+        end
+
+        UI_SFX.ClickOpen:Play()
+
+        local emptySlot = GetFirstEmptySlot()
+        if emptySlot then
+            if BackpackModule.FromInventoryToHotbar(itemId, emptySlot) then
+                BackpackModule.HandleTool(tostring(emptySlot))
+                CloseInventory()
+            end
+            return
+        end
+
+        local replaceableId, replaceableSlot = GetReplaceableHotbarItem()
+        if not replaceableId or not replaceableSlot then
+            AnnouncementEvent:Fire("No usable hotbar slot is available.", Color3.fromRGB(255, 80, 80))
+            if UI_SFX:FindFirstChild("PurchaseFail") then
+                UI_SFX.PurchaseFail:Play()
+            end
+            return
+        end
+
+        if not BackpackModule.FromHotbarToInventory(replaceableId) then
+            return
+        end
+
+        if BackpackModule.FromInventoryToHotbar(itemId, replaceableSlot) then
+            BackpackModule.HandleTool(tostring(replaceableSlot))
+            CloseInventory()
+        end
+    end)
+
+    slotButton.InputBegan:Connect(function(input)
+        if DeleteConfirmationFrame.Visible or not InventoryFrame.Visible then
+            return
+        end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            BackpackModule.StartDragging(itemId, slotButton, input.Position)
+        end
+    end)
+
+    if activeEquippedItemId == itemId then
+        slotButton.SelectionHighlight.Enabled = true
+    end
+end
+
+local function AddItem(itemId, itemData)
+    if not itemId or not itemData or currentCategory == "" then
+        return
+    end
+
+    local catData = GetCategoryData(currentCategory)
+    local allowed = false
+    if currentCategory == "Favorites" then
+        if itemData.Favorite then
+            allowed = true
+        end
+    elseif itemData.Type == "MRKETBox" or (catData and table.find(catData, itemData.Type)) then
+        allowed = true
+    end
+
+    if not allowed then
+        return
+    end
+
+    local searchText = SearchFrame.Text:lower()
+    local itemSlot = nil
+
+    if itemData.Type == "Detergents" then
+        local detergentDef = DetergentModule.Detergents[itemData.ItemKey]
+        if not detergentDef then
+            return
+        end
+        itemSlot = ItemSlotTemplate:Clone()
+        itemSlot.ItemIcon.Image = detergentDef.ImageId or ""
+        itemSlot.ItemName.Text = detergentDef.Name or ""
+        itemSlot.RarityIndicator.ImageColor3 = ClothingModule.Rarities[detergentDef.Rarity].Color
+        if itemData.Quantity and itemData.Quantity > 1 then
+            itemSlot.Quantity.Text = "x" .. itemData.Quantity
+        end
+        itemSlot.Name = itemId
+        setUpItemSlot(itemSlot, itemId)
+        itemSlot:SetAttribute("Type", itemData.Type)
+        itemSlot:SetAttribute("ItemKey", itemData.ItemKey)
+        itemSlot:SetAttribute("Display", detergentDef.Name)
+
+        local nameLower = itemSlot.ItemName.Text:lower()
+        local defNameLower = (detergentDef.Name or ""):lower()
+        itemSlot.Visible = (nameLower:find(searchText, 1, true) ~= nil) or (defNameLower:find(searchText, 1, true) ~= nil)
+        itemSlot.Parent = InventoryScroll
+        return true
+
+    elseif itemData.Type == "MatchaItems" then
+        local matchaDef = MatchaItems[itemData.ItemKey] or MatchaItems.CoffeeItems[itemData.ItemKey]
+        if not matchaDef then
+            return
+        end
+        itemSlot = ItemSlotTemplate:Clone()
+        itemSlot.ItemIcon.Image = matchaDef.ImageId or ""
+        local displayName = matchaDef.Name or itemData.ItemKey
+        itemSlot.ItemName.Text = displayName
+
+        if MatchaItems.CoffeeItems[itemData.ItemKey] then
+            itemSlot.RarityIndicator.ImageColor3 = Color3.new(0.666667, 0.333333, 0)
+        else
+            itemSlot.RarityIndicator.ImageColor3 = Color3.new(0, 0.8, 0)
+        end
+
+        if itemData.Quantity and itemData.Quantity > 1 then
+            itemSlot.Quantity.Text = "x" .. itemData.Quantity
+        end
+        itemSlot.Name = itemId
+        setUpItemSlot(itemSlot, itemId)
+        itemSlot:SetAttribute("Type", itemData.Type)
+        itemSlot:SetAttribute("ItemKey", itemData.ItemKey)
+        itemSlot:SetAttribute("Display", matchaDef.Name)
+
+        local nameLower = itemSlot.ItemName.Text:lower()
+        local defNameLower = (matchaDef.Name or ""):lower()
+        itemSlot.Visible = (nameLower:find(searchText, 1, true) ~= nil) or (defNameLower:find(searchText, 1, true) ~= nil)
+        itemSlot.Parent = InventoryScroll
+        return true
+
+    elseif itemData.Type == "Decorations" then
+        local furnitureDef = Furnitures.Decorations[itemData.ItemKey] or Furnitures[itemData.ItemKey]
+        if not furnitureDef or not furnitureDef.Rarity or not Furnitures.Rarities[furnitureDef.Rarity] then
+            return
+        end
+        itemSlot = ItemSlotTemplate:Clone()
+        itemSlot.ItemIcon.Image = furnitureDef.Image or ""
+        local displayName = furnitureDef.Display or itemData.ItemKey
+        itemSlot.ItemName.Text = displayName
+        itemSlot.RarityIndicator.ImageColor3 = Furnitures.Rarities[furnitureDef.Rarity].Color
+        if itemData.Quantity and itemData.Quantity > 1 then
+            itemSlot.Quantity.Text = "x" .. itemData.Quantity
+        end
+        itemSlot.Name = itemId
+        setUpItemSlot(itemSlot, itemId)
+        itemSlot:SetAttribute("Type", itemData.Type)
+        itemSlot:SetAttribute("ItemKey", itemData.ItemKey)
+        itemSlot:SetAttribute("Display", furnitureDef.Display)
+
+        local nameLower = itemSlot.ItemName.Text:lower()
+        local defNameLower = (furnitureDef.Display or ""):lower()
+        itemSlot.Visible = (nameLower:find(searchText, 1, true) ~= nil) or (defNameLower:find(searchText, 1, true) ~= nil)
+        itemSlot.Parent = InventoryScroll
+        return true
+
+    elseif itemData.Type == "MRKETBox" then
+        if InventoryScroll:FindFirstChild(itemId) then
+            return
+        end
+        itemSlot = ItemSlotTemplate:Clone()
+        itemSlot.ItemIcon.Visible = false
+        itemSlot.PackageOverlay.Visible = true
+        itemSlot.ItemName.Text = itemData.Name or "Order box"
+        itemSlot.RarityIndicator.ImageColor3 = itemData.ItemColor or Color3.fromRGB(193, 141, 89)
+        itemSlot.Name = itemId
+        setUpItemSlot(itemSlot, itemId)
+        itemSlot:SetAttribute("Type", itemData.Type)
+        itemSlot:SetAttribute("Display", itemData.Name or "Order box")
+
+        itemSlot.Activated:Connect(function()
+            local tool = itemData.Tool
+            if not tool or not tool.Parent then
+                return
+            end
+            if tool.Parent == LocalPlayer.Character then
+                InventoryEvent:FireServer("UnHold", itemId)
+            else
+                InventoryEvent:FireServer("Hold", itemId)
+            end
+        end)
+
+        local nameLower = itemSlot.ItemName.Text:lower()
+        itemSlot.Visible = (searchText == "") or (nameLower:find(searchText, 1, true) ~= nil)
+        itemSlot.Parent = InventoryScroll
+        return true
+
+    elseif itemData.Type == "System" then
+        itemSlot = ItemSlotTemplate:Clone()
+        itemSlot.ItemIcon.Image = itemData.Image or ""
+        itemSlot.ItemName.Text = itemData.ItemKey
+        itemSlot.RarityIndicator.ImageColor3 = itemData.Color or Color3.fromRGB(255, 255, 255)
+        itemSlot.Name = itemId
+        setUpItemSlot(itemSlot, itemId)
+        itemSlot:SetAttribute("Type", itemData.Type)
+        itemSlot:SetAttribute("ItemKey", itemId)
+        itemSlot:SetAttribute("Display", itemId)
+
+        local nameLower = itemSlot.ItemName.Text:lower()
+        local keyLower = itemData.ItemKey:lower()
+        itemSlot.Visible = (nameLower:find(searchText, 1, true) ~= nil) or (keyLower:find(searchText, 1, true) ~= nil)
+        itemSlot.Parent = InventoryScroll
+        return true
+
+    else
+        if InventoryScroll:FindFirstChild(itemId) then
+            return
+        end
+        local clothingDef = ClothingModule.Items[itemData.ItemKey]
+        if not clothingDef then
+            return
+        end
+        itemSlot = ItemSlotTemplate:Clone()
+        local icon = ""
+        if itemData.ItemColor and clothingDef.Color and clothingDef.Color[itemData.ItemColor] then
+            icon = clothingDef.Color[itemData.ItemColor].Icon or ""
+        else
+            icon = clothingDef.itemIcon or ""
+        end
+        itemSlot.ItemIcon.Image = icon
+
+        if itemData.Package then
+            itemSlot.ItemIcon.Visible = false
+            itemSlot.PackageOverlay.Visible = true
+        end
+
+        local brand = clothingDef.Brand or ""
+        local name = clothingDef.Name or ""
+        if itemData.Condition == "Dirty" then
+            itemSlot.DirtyOverlay.Visible = true
+            itemSlot.ItemName.Text = "Dirty " .. brand .. " " .. name
+        else
+            itemSlot.ItemName.Text = brand .. " " .. name
+        end
+
+        itemSlot.RarityIndicator.ImageColor3 = ClothingModule.Rarities[clothingDef.Rarity].Color
+        itemSlot.Name = itemId
+        setUpItemSlot(itemSlot, itemId)
+
+        if not UserInputService.MouseEnabled then
+            local lastTap = 0
+            itemSlot.Activated:Connect(function()
+                if tick() - lastTap < 0.3 then
+                    InventoryEvent:FireServer("Favorite", itemId)
+                end
+                lastTap = tick()
+            end)
+        else
+            itemSlot.MouseEnter:Connect(function()
+                if not itemData.Favorite then
+                    itemSlot.StarButton.Visible = true
+                end
+            end)
+            itemSlot.MouseLeave:Connect(function()
+                if not itemData.Favorite then
+                    itemSlot.StarButton.Visible = false
+                end
+            end)
+            itemSlot.StarButton.Activated:Connect(function()
+                InventoryEvent:FireServer("Favorite", itemId)
+            end)
+        end
+
+        if itemData.Favorite then
+            itemSlot.StarButton.Image = "rbxassetid://119444747331950"
+            itemSlot.StarButton.Visible = true
+        end
+
+        itemSlot:SetAttribute("Type", itemData.Type)
+        itemSlot:SetAttribute("ItemKey", itemData.ItemKey)
+        itemSlot:SetAttribute("Display", clothingDef.Name)
+
+        local nameLower = itemSlot.ItemName.Text:lower()
+        local defNameLower = (clothingDef.Name or ""):lower()
+        itemSlot.Visible = (nameLower:find(searchText, 1, true) ~= nil) or (defNameLower:find(searchText, 1, true) ~= nil)
+        itemSlot.Parent = InventoryScroll
+        return true
+    end
+end
+
+local function RemoveItem(itemId)
+    if itemId and InventoryScroll:FindFirstChild(itemId) then
+        InventoryScroll[itemId]:Destroy()
+    end
+end
+
+local function SearchSort()
+    local search = SearchFrame.Text:lower()
+    for _, child in ipairs(InventoryScroll:GetChildren()) do
+        if child:IsA("ImageButton") and child:FindFirstChild("ItemName") then
+            local nameLower = child.ItemName.Text:lower()
+            local displayLower = (child:GetAttribute("Display") or ""):lower()
+            child.Visible = (nameLower:find(search, 1, true) ~= nil) or (displayLower:find(search, 1, true) ~= nil)
+        end
+    end
+end
+
+local function LoadInventory(categoryName)
+    if currentCategory == categoryName then
+        return
+    end
+    ClearInventory()
+    currentCategory = categoryName
+    local items = GetItemsByCategory(categoryName)
+    if items then
+        for key, item in pairs(items) do
+            AddItem(key, item)
+        end
+    end
+    SearchSort()
+    sortChildren()
+end
+
+local function InitCategories()
+    for _, child in ipairs(CategoriesFrame:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+    for _, catEntry in pairs(CATEGORIES) do
+        local catName = next(catEntry)
+        local btn = CategoryButtonTemplate:Clone()
+        btn.Name = catName
+        btn.Text = catName
+        btn.Activated:Connect(function()
+            LoadInventory(catName)
+            for _, otherBtn in ipairs(CategoriesFrame:GetChildren()) do
+                if otherBtn:IsA("TextButton") and otherBtn:FindFirstChild("SelectStroke") then
+                    otherBtn.SelectStroke.Enabled = false
+                end
+            end
+            if btn:FindFirstChild("SelectStroke") then
+                btn.SelectStroke.Enabled = true
+            end
+        end)
+        btn.Parent = CategoriesFrame
+    end
+end
+
+local function ClearHotbar()
+    for _, child in ipairs(HotbarFrame.LayoutContainer:GetChildren()) do
+        if child:IsA("ImageButton") then
+            child:Destroy()
+        end
+    end
+end
+
+local HoverFrame = InventoryTemplates:WaitForChild("HoverFrame"):Clone()
+local function ShowHover(parentSlot, descList, detergentPodKey)
+    if not HoverFrame.Parent then
+        HoverFrame = InventoryTemplates.HoverFrame:Clone()
+    end
+    for _, child in ipairs(HoverFrame:GetChildren()) do
+        if child:IsA("TextLabel") and child.Name ~= "Tmp" then
+            child:Destroy()
+        end
+    end
+    for _, line in pairs(descList) do
+        local infoLabel = HoverFrame.Tmp:Clone()
+        infoLabel.Name = "info"
+        infoLabel.Text = line
+        infoLabel.Visible = true
+        infoLabel.Parent = HoverFrame
+    end
+    if HoverFrame:FindFirstChild("PodPill") then
+        HoverFrame.PodPill:Destroy()
+    end
+    if detergentPodKey and POD_NAMES[detergentPodKey] then
+        local podPill = Instance.new("TextLabel")
+        podPill.Name = "PodPill"
+        podPill.Size = UDim2.new(1, 0, 0.65, 0)
+        podPill.BackgroundColor3 = POD_COLORS[detergentPodKey]
+        podPill.BackgroundTransparency = 0.2
+        podPill.Text = POD_NAMES[detergentPodKey]
+        podPill.TextColor3 = Color3.new(1, 1, 1)
+        podPill.TextScaled = true
+        podPill.Font = Enum.Font.GothamBold
+        podPill.TextStrokeTransparency = 0.5
+        podPill.TextStrokeColor3 = Color3.new(0, 0, 0)
+        podPill.LayoutOrder = -1
+        podPill.Parent = HoverFrame
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0.4, 0)
+        corner.Parent = podPill
+
+        local listLayout = HoverFrame:FindFirstChildOfClass("UIListLayout")
+        if listLayout then
+            listLayout.Padding = UDim.new(0.08, 0)
+        end
+    end
+    HoverFrame.Parent = parentSlot
+    HoverFrame.Visible = true
+end
+
+function BackpackModule.AddHotbarSlot(itemId, itemData, slotNum)
+    if not itemId or not itemData or not slotNum then
+        return
+    end
+
+    local itemDef = ClothingModule.Items[itemData.ItemKey]
+        or DetergentModule.Detergents[itemData.ItemKey]
+        or MatchaItems[itemData.ItemKey]
+        or MatchaItems.CoffeeItems[itemData.ItemKey]
+        or Furnitures.Decorations[itemData.ItemKey]
+        or Furnitures[itemData.ItemKey]
+        or (itemData.Type == "MRKETBox" and itemData)
+        or (itemData.Type == "System" and itemData)
+
+    if not itemDef or HotbarFrame.LayoutContainer:FindFirstChild(tostring(slotNum)) then
+        return
+    end
+
+    local slot = HotbarItemSlotTemplate:Clone()
+    slot.Name = tostring(slotNum)
+    slot.HotbarNumber.Text = tostring(slotNum % 10)
+
+    local uiScale = slot:FindFirstChildOfClass("UIScale")
+    if isTouchEnabled and uiScale then
+        uiScale.Scale = 0.75
+    end
+
+    if not itemDef.Rarity then
+        slot.RarityIndicator.ImageColor3 = itemData.ItemColor or Color3.new(0.258824, 0.533333, 0.321569)
+    elseif ClothingModule.Rarities[itemDef.Rarity] then
+        slot.RarityIndicator.ImageColor3 = ClothingModule.Rarities[itemDef.Rarity].Color
+    elseif Furnitures.Rarities[itemDef.Rarity] then
+        slot.RarityIndicator.ImageColor3 = Furnitures.Rarities[itemDef.Rarity].Color
+    end
+
+    if itemData.Quantity and itemData.Quantity > 1 then
+        slot.Quantity.Text = "x" .. itemData.Quantity
+    end
+
+    slot.LayoutOrder = slotNum
+
+    if itemData.Condition == "Dirty" then
+        slot.DirtyOverlay.Visible = true
+        slot.ItemName.Text = "Dirty " .. (itemDef.Brand or "") .. " " .. (itemDef.Name or "")
+    else
+        local brand = itemDef.Brand and (itemDef.Brand .. " ") or ""
+        local colorPrefix = itemData.ItemColor and (itemData.ItemColor .. " ") or ""
+        local name = itemDef.Name or itemDef.Display or itemDef.ItemKey or ""
+        slot.ItemName.Text = brand .. colorPrefix .. name
+    end
+
+    slot.Visible = true
+
+    slot.Activated:Connect(function()
+        UI_SFX.ClickOpen:Play()
+        BackpackModule.HandleTool(slot.Name)
+    end)
+
+    slot.InputBegan:Connect(function(input)
+        if InventoryFrame.Visible and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+            BackpackModule.StartDragging(itemId, slot, input.Position)
+        end
+    end)
+
+    local descriptionList = {}
+    if itemData.Image then
+        slot.ItemIcon.Image = itemData.Image
+        slot.ItemIcon.Visible = true
+    end
+
+    if itemData.Package then
+        slot.ItemIcon.Visible = false
+        slot.PackageOverlay.Visible = true
+        table.insert(descriptionList, "Packed")
+    end
+
+    if itemData.Usage then
+        local usageDisplay = EnumClothes.Usage[itemData.Usage] and EnumClothes.Usage[itemData.Usage].Display
+        if usageDisplay then
+            table.insert(descriptionList, usageDisplay)
+        end
+    end
+
+    if itemDef.Aura then
+        local detergentDef = itemData.DetergentEffect and DetergentModule.Detergents[itemData.DetergentEffect]
+        local auraMultiplier = detergentDef and detergentDef.AuraMultiplier or 1
+        local usageAura = EnumClothes.Usage[itemData.Usage] and EnumClothes.Usage[itemData.Usage].Aura or 1
+        local totalAura = math.round(itemDef.Aura * usageAura * auraMultiplier * 100) / 100
+        table.insert(descriptionList, "Aura: " .. totalAura .. "/sec")
+    end
+
+    if itemDef.AuraMultiplier then
+        table.insert(descriptionList, "Aura Multi: x" .. itemDef.AuraMultiplier)
+    end
+    if itemDef.ResaleIncrease then
+        table.insert(descriptionList, "Resale Multi: x" .. itemDef.ResaleIncrease)
+    end
+    if itemData.Description then
+        for _, desc in pairs(itemData.Description) do
+            table.insert(descriptionList, desc)
+        end
+    end
+
+    if itemData.Type == "Decorations" then
+        local categoryName = itemDef.Category or "Furniture"
+        local catDisplay = ({WM = "Washing Machine", CoffeeTable = "Coffee Table"})[categoryName] or categoryName
+        local isDeco = Furnitures.Decorations[itemData.ItemKey] ~= nil
+        table.insert(descriptionList, "Type: " .. catDisplay .. (isDeco and " Decoration" or ""))
+        if type(itemDef.Description) == "table" then
+            for _, desc in ipairs(itemDef.Description) do
+                table.insert(descriptionList, tostring(desc))
+            end
+        elseif type(itemDef.Description) == "string" and itemDef.Description ~= "" then
+            table.insert(descriptionList, itemDef.Description)
+        end
+    end
+
+    if not UserInputService.MouseEnabled then
+        slot.InputBegan:Connect(function()
+            ShowHover(slot, descriptionList, itemData.DetergentEffect)
+        end)
+        slot.InputEnded:Connect(function()
+            if HoverFrame.Parent == slot then
+                HoverFrame.Visible = false
+            end
+        end)
+        local lastTap = 0
+        slot.Activated:Connect(function()
+            if tick() - lastTap < 0.3 then
+                InventoryEvent:FireServer("Favorite", itemId)
+            end
+            lastTap = tick()
+        end)
+    else
+        slot.MouseEnter:Connect(function()
+            ShowHover(slot, descriptionList, itemData.DetergentEffect)
+            if itemData.Usage and not itemData.Favorite then
+                slot.StarButton.Visible = true
+            end
+        end)
+        slot.MouseLeave:Connect(function()
+            if HoverFrame.Parent == slot then
+                HoverFrame.Visible = false
+            end
+            if itemData.Usage and not itemData.Favorite then
+                slot.StarButton.Visible = false
+            end
+        end)
+        slot.StarButton.Activated:Connect(function()
+            InventoryEvent:FireServer("Favorite", itemId)
+        end)
+    end
+
+    if itemData.Favorite then
+        slot.StarButton.Image = "rbxassetid://119444747331950"
+        slot.StarButton.Visible = true
+    end
+
+    slot:SetAttribute("ItemId", itemId)
+    slot.Parent = HotbarFrame.LayoutContainer
+    return true
+end
+
+function BackpackModule.RemoveHotbarSlot(itemId)
+    for _, child in ipairs(HotbarFrame.LayoutContainer:GetChildren()) do
+        if child:GetAttribute("ItemId") == itemId then
+            child:Destroy()
+            if isInventoryOpen then
+                ShowFreeSpaces()
+            end
+        end
+    end
+end
+
+function BackpackModule.AddMorieliCardSlot()
+    local existingSlot = nil
+    for _, child in ipairs(HotbarFrame.LayoutContainer:GetChildren()) do
+        if child:GetAttribute("ItemId") == "System_MorieliCard" then
+            existingSlot = child
+            break
+        end
+    end
+
+    if not inventoryState.Hotbar.System_MorieliCard then
+        local targetSlot = nil
+        for slot = 4, MAX_HOTBAR_SLOTS do
+            if not HotbarFrame.LayoutContainer:FindFirstChild(tostring(slot)) then
+                targetSlot = slot
+                break
+            end
+        end
+        if not targetSlot then
+            return "noslot"
+        end
+
+        inventoryState.Hotbar.System_MorieliCard = {
+            ItemKey = "MorieliCard",
+            Type = "System",
+            Image = "rbxassetid://113655608330795",
+            Description = {"House Morieli ID"},
+            InstanceId = "System_MorieliCard",
+            SlotNum = targetSlot,
+            Color = Color3.fromRGB(196, 30, 30),
+        }
+        local added = BackpackModule.AddHotbarSlot("System_MorieliCard", inventoryState.Hotbar.System_MorieliCard, targetSlot)
+        return "add:" .. tostring(added) .. " slot:" .. tostring(targetSlot)
+    else
+        if existingSlot then
+            return "already"
+        end
+        inventoryState.Hotbar.System_MorieliCard = nil
+    end
+end
+
+function BackpackModule.RemoveMorieliCardSlot()
+    if not inventoryState.Hotbar.System_MorieliCard then
+        return
+    end
+    if activeEquippedItemId == "System_MorieliCard" then
+        activeEquippedItemId = ""
+    end
+    BackpackModule.RemoveHotbarSlot("System_MorieliCard")
+    inventoryState.Hotbar.System_MorieliCard = nil
+end
+
+local pendingDeleteItemKey = nil
+local function DeleteRequest(itemId)
+    if not itemId or itemId == "" then
+        return
+    end
+
+    local stats = LocalPlayer:FindFirstChild("Stats")
+    if stats and stats:FindFirstChild("FirstTimePlaying") and stats.FirstTimePlaying.Value then
+        AnnouncementEvent:Fire("Finish the tutorial first!", Color3.new(255, 0, 0))
+        return
+    end
+
+    local targetSlot = InventoryScroll:FindFirstChild(itemId)
+    if not targetSlot then
+        for _, child in ipairs(HotbarFrame.LayoutContainer:GetChildren()) do
+            if child:GetAttribute("ItemId") == itemId then
+                targetSlot = child
+                break
+            end
+        end
+    end
+
+    if not targetSlot or itemId:find("^System_") then
+        return
+    end
+
+    DeleteConfirmationFrame.DisplayLabel.Text = "Delete " .. targetSlot.ItemName.Text .. "?"
+    pendingDeleteItemKey = itemId
+    DeleteConfirmationFrame.Visible = true
+end
+
+local detergentConnectionCallback = nil
+
+function BackpackModule.HandleTool(slotNumStr)
+    local slotButton = HotbarFrame.LayoutContainer:FindFirstChild(slotNumStr)
+    if not slotButton then
+        return
+    end
+
+    local itemId = slotButton:GetAttribute("ItemId")
+    if not itemId or not inventoryState.Hotbar[itemId] then
+        return
+    end
+
+    if activeEquippedItemId == "" then
+        PhoneUI:Fire("Close")
+        IndexModule:StopShowingIndex()
+        InventoryEvent:FireServer("UnHold", "Phone")
+
+        for _, child in ipairs(HotbarFrame.LayoutContainer:GetChildren()) do
+            if child:FindFirstChild("SelectionHighlight") then
+                child.SelectionHighlight.Enabled = false
+            end
+        end
+        if InventoryScroll:FindFirstChild(activeEquippedItemId) then
+            InventoryScroll[activeEquippedItemId].SelectionHighlight.Enabled = false
+        end
+
+        activeEquippedItemId = itemId
+        local itemInfo = inventoryState.Hotbar[itemId]
+
+        if itemInfo.Type == "Detergents" then
+            if detergentConnectionCallback then
+                task.spawn(detergentConnectionCallback, true)
+            end
+            local detergentDef = DetergentModule.Detergents[itemInfo.ItemKey]
+            InventoryEvent:FireServer("Hold", detergentDef.Name)
+        elseif itemInfo.Type == "Decorations" then
+            if detergentConnectionCallback then
+                task.spawn(detergentConnectionCallback, false)
+            end
+            InventoryEvent:FireServer("Hold", itemId, "Decorations")
+        elseif itemInfo.Type ~= "System" then
+            if detergentConnectionCallback then
+                task.spawn(detergentConnectionCallback, false)
+            end
+            InventoryEvent:FireServer("Hold", itemId)
+        elseif itemId == "System_Phone" then
+            PhoneUI:Fire("Open")
+            InventoryEvent:FireServer("Hold", "Phone")
+        elseif itemId == "System_Index" then
+            IndexModule:ShowIndex()
+        elseif itemId == "System_Umbrella" then
+            InventoryEvent:FireServer("Hold", "Umbrella")
+        elseif itemId == "System_MorieliCard" then
+            InventoryEvent:FireServer("Hold", "MorieliCard")
+        end
+
+        slotButton.SelectionHighlight.Enabled = true
+    else
+        local equippedItem = inventoryState.Hotbar[activeEquippedItemId]
+        if equippedItem then
+            if equippedItem.Type == "Detergents" then
+                if detergentConnectionCallback then
+                    task.spawn(detergentConnectionCallback, false)
+                end
+                local detergentDef = DetergentModule.Detergents[equippedItem.ItemKey]
+                InventoryEvent:FireServer("UnHold", detergentDef.Name)
+            elseif equippedItem.Type == "Decorations" then
+                InventoryEvent:FireServer("UnHold", activeEquippedItemId, "Decorations")
+            elseif equippedItem.Type ~= "System" then
+                InventoryEvent:FireServer("UnHold", activeEquippedItemId)
+            elseif activeEquippedItemId == "System_Phone" then
+                InventoryEvent:FireServer("UnHold", "Phone")
+                PhoneUI:Fire("Close")
+            elseif activeEquippedItemId == "System_Index" then
+                IndexModule:StopShowingIndex()
+            elseif activeEquippedItemId == "System_Umbrella" then
+                InventoryEvent:FireServer("UnHold", "Umbrella")
+            elseif activeEquippedItemId == "System_MorieliCard" then
+                InventoryEvent:FireServer("UnHold", "MorieliCard")
+            end
+        end
+
+        slotButton.SelectionHighlight.Enabled = false
+        if activeEquippedItemId == itemId then
+            activeEquippedItemId = ""
+        end
+    end
+end
+
+function BackpackModule.FromInventoryToHotbar(itemId, slotNum)
+    local item = inventoryState.Backpack[itemId]
+    if not item then
+        return
+    end
+    if inventoryState.Hotbar[itemId] then
+        warn("Data error, duplicate found: " .. itemId)
+        return
+    end
+    if not InventoryScroll:FindFirstChild(itemId) then
+        return
+    end
+
+    if activeEquippedItemId == itemId then
+        activeEquippedItemId = ""
+    end
+
+    item.SlotNum = slotNum
+    inventoryState.Hotbar[itemId] = item
+    inventoryState.Backpack[itemId] = nil
+
+    if InventoryScroll:FindFirstChild(itemId) then
+        InventoryScroll[itemId]:Destroy()
+    end
+
+    RecordSlot(itemId, slotNum)
+    return BackpackModule.AddHotbarSlot(itemId, item, slotNum)
+end
+
+function BackpackModule.FromHotbarToInventory(itemId)
+    local item = inventoryState.Hotbar[itemId]
+    if not item then
+        return
+    end
+    if inventoryState.Backpack[itemId] then
+        warn("Data error, duplicate found: " .. itemId)
+        return
+    end
+
+    local slotButton = HotbarFrame.LayoutContainer:FindFirstChild(tostring(item.SlotNum))
+    if not slotButton then
+        return
+    end
+
+    if activeEquippedItemId == itemId then
+        BackpackModule.HandleTool(tostring(item.SlotNum))
+    end
+
+    item.SlotNum = nil
+    inventoryState.Backpack[itemId] = item
+    inventoryState.Hotbar[itemId] = nil
+
+    BackpackModule.RemoveHotbarSlot(itemId)
+    RecordSlot(itemId, 0)
+
+    return AddItem(itemId, item)
+end
+
+function BackpackModule.SwapHotbars(itemIdA, targetSlotOrItemB)
+    local itemA = inventoryState.Hotbar[itemIdA]
+    if not itemA then
+        return
+    end
+
+    if type(targetSlotOrItemB) == "number" then
+        local slotNum = targetSlotOrItemB
+        local slotButton = HotbarFrame.LayoutContainer:FindFirstChild(tostring(itemA.SlotNum))
+        if not slotButton then
+            return
+        end
+
+        for _, item in pairs(inventoryState.Hotbar) do
+            if item.SlotNum == slotNum then
+                return
+            end
+        end
+
+        while HotbarFrame.LayoutContainer:FindFirstChild("EmptyHotbarItemSlot") do
+            HotbarFrame.LayoutContainer.EmptyHotbarItemSlot:Destroy()
+        end
+
+        itemA.SlotNum = slotNum
+        slotButton.Name = tostring(slotNum)
+        slotButton.HotbarNumber.Text = tostring(slotNum % 10)
+        slotButton.LayoutOrder = slotNum
+
+        RecordSlot(itemIdA, slotNum)
+        ShowFreeSpaces()
+        return
+    end
+
+    local itemIdB = targetSlotOrItemB
+    local itemB = inventoryState.Hotbar[itemIdB]
+    if not itemB then
+        return
+    end
+
+    local slotA = itemA.SlotNum
+    local slotB = itemB.SlotNum
+
+    local slotBtnA = HotbarFrame.LayoutContainer:FindFirstChild(tostring(slotA))
+    local slotBtnB = HotbarFrame.LayoutContainer:FindFirstChild(tostring(slotB))
+    if not slotBtnA or not slotBtnB then
+        return
+    end
+
+    itemA.SlotNum = slotB
+    itemB.SlotNum = slotA
+
+    slotBtnA.Name = tostring(slotB)
+    slotBtnB.Name = tostring(slotA)
+
+    slotBtnA.HotbarNumber.Text = tostring(slotB % 10)
+    slotBtnB.HotbarNumber.Text = tostring(slotA % 10)
+
+    slotBtnA.LayoutOrder = slotB
+    slotBtnB.LayoutOrder = slotA
+
+    RecordSlot(itemIdA, slotB)
+    RecordSlot(itemIdB, slotA)
+end
+
+local dragGhost = nil
+local dragStartPos = nil
+local isDragging = false
+
+local function StartDrag(sourceGui)
+    if dragGhost then
+        dragGhost:Destroy()
+    end
+
+    local clone = sourceGui:Clone()
+    local ratio = clone:FindFirstChild("UIAspectRatioConstraint")
+    if ratio then
+        ratio:Destroy()
+    end
+    if clone:FindFirstChild("HoverFrame") then
+        clone.HoverFrame:Destroy()
+    end
+
+    clone.AnchorPoint = Vector2.new(0.5, 0.5)
+    clone.Interactable = false
+    clone.Size = UDim2.new(0, sourceGui.AbsoluteSize.X, 0, sourceGui.AbsoluteSize.Y)
+    clone.ZIndex = 3
+    clone.Parent = BackpackGUI
+
+    local bgPos = BackpackGUI.AbsolutePosition
+    clone.Position = UDim2.fromOffset(
+        sourceGui.AbsolutePosition.X + sourceGui.AbsoluteSize.X * 0.5 - bgPos.X,
+        sourceGui.AbsolutePosition.Y + sourceGui.AbsoluteSize.Y * 0.5 - bgPos.Y
+    )
+
+    dragGhost = clone
+    isDragging = true
+end
+
+local function UpdateDrag(position)
+    if isDragging and dragGhost and dragGhost.Parent then
+        local bgPos = dragGhost.Parent.AbsolutePosition
+        dragGhost.Position = UDim2.fromOffset(position.X - bgPos.X, position.Y - bgPos.Y)
+    end
+end
+
+local function IsInsideUI(point, gui)
+    local pos = gui.AbsolutePosition
+    local size = gui.AbsoluteSize
+    return point.X >= pos.X and point.X <= pos.X + size.X and point.Y >= pos.Y and point.Y <= pos.Y + size.Y
+end
+
+local function StopDrag(point)
+    if not isDragging then
+        return
+    end
+    isDragging = false
+    dragStartPos = nil
+
+    if dragGhost then
+        dragGhost:Destroy()
+        dragGhost = nil
+    end
+
+    for _, slot in ipairs(InventoryScroll:GetChildren()) do
+        if slot:IsA("ImageButton") and IsInsideUI(point, slot) then
+            return "Backpack", slot.Name
+        end
+    end
+
+    if IsInsideUI(point, InventoryScroll) then
+        return "Backpack"
+    end
+
+    for _, slot in ipairs(HotbarFrame.LayoutContainer:GetChildren()) do
+        if slot:IsA("ImageButton") and slot.Name ~= "InvSlot" and IsInsideUI(point, slot) then
+            return "Hotbar", slot:GetAttribute("ItemId"), slot.LayoutOrder
+        end
+    end
+
+    local deleteBtn = InventoryFrame.HolderFrame.DeleteButton
+    if IsInsideUI(point, deleteBtn) then
+        return "Delete"
+    end
+end
+
+local dragInputChangedConn = nil
+local dragInputEndedConn = nil
+
+function BackpackModule.StartDragging(itemId, sourceGui, startPosition)
+    if dragInputChangedConn then
+        return
+    end
+
+    dragStartPos = startPosition
+
+    dragInputChangedConn = UserInputService.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            if not sourceGui then
+                return
+            end
+            if isDragging then
+                UpdateDrag(input.Position)
+                return
+            end
+            if dragStartPos and (input.Position - dragStartPos).Magnitude > 0 then
+                StartDrag(sourceGui)
+                UpdateDrag(input.Position)
+            end
+        end
+    end)
+
+    dragInputEndedConn = UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            if dragInputChangedConn then
+                dragInputChangedConn:Disconnect()
+                dragInputChangedConn = nil
+            end
+            if dragInputEndedConn then
+                dragInputEndedConn:Disconnect()
+                dragInputEndedConn = nil
+            end
+
+            local targetType, targetId, targetSlot = StopDrag(input.Position)
+            if not targetType then
+                return
+            end
+
+            local sourceLocation = inventoryState.Backpack[itemId] and "Backpack" or (inventoryState.Hotbar[itemId] and "Hotbar" or nil)
+            if not sourceLocation then
+                return
+            end
+
+            if targetType == "Backpack" then
+                if sourceLocation == "Backpack" then
+                    return
+                end
+                if not targetId then
+                    BackpackModule.FromHotbarToInventory(itemId)
+                    return
+                end
+                if not inventoryState.Backpack[targetId] then
+                    return
+                end
+                local currentSlot = inventoryState.Hotbar[itemId].SlotNum
+                if BackpackModule.FromHotbarToInventory(itemId) then
+                    BackpackModule.FromInventoryToHotbar(targetId, currentSlot)
+                end
+                return
+            end
+
+            if targetType == "Delete" then
+                DeleteRequest(itemId)
+                return
+            end
+
+            if targetType == "Hotbar" then
+                if not targetId then
+                    return
+                end
+
+                if sourceLocation == "Hotbar" then
+                    if targetId == "EmptyHotbarItemSlot" then
+                        BackpackModule.SwapHotbars(itemId, targetSlot)
+                    elseif inventoryState.Hotbar[targetId] then
+                        BackpackModule.SwapHotbars(itemId, targetId)
+                    end
+                    return
+                end
+
+                if targetId == "EmptyHotbarItemSlot" then
+                    BackpackModule.FromInventoryToHotbar(itemId, targetSlot)
+                    return
+                end
+
+                if inventoryState.Hotbar[targetId] then
+                    local targetHotbarSlot = inventoryState.Hotbar[targetId].SlotNum
+                    if BackpackModule.FromHotbarToInventory(targetId) then
+                        BackpackModule.FromInventoryToHotbar(itemId, targetHotbarSlot)
+                    end
+                end
+            end
+        end
+    end)
+end
+
+local function TakesInventorySpace(toolInstance)
+    local itemKey = toolInstance:GetAttribute("ItemKey")
+    local itemDef = itemKey and ClothingModule.Items[itemKey]
+    return itemDef ~= nil and itemDef.Type ~= ClothingModule.EnumClothes.Type.Backpack
+end
+
+local function UpdateItemCount()
+    local character = LocalPlayer.Character
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+    if not backpack then
+        return
+    end
+
+    local occupiedCount = 0
+    if character then
+        local equippedTool = character:FindFirstChildOfClass("Tool")
+        if equippedTool and TakesInventorySpace(equippedTool) then
+            occupiedCount = occupiedCount + 1
+        end
+    end
+
+    for _, tool in ipairs(backpack:GetChildren()) do
+        if TakesInventorySpace(tool) then
+            occupiedCount = occupiedCount + 1
+        end
+    end
+
+    local stats = LocalPlayer:FindFirstChild("Stats")
+    local maxInventorySize = stats and stats:FindFirstChild("MaxInventorySize")
+    if maxInventorySize then
+        InventoryFrame.HolderFrame.InventorySlotsCounter.Text = tostring(occupiedCount) .. "/" .. tostring(maxInventorySize.Value) .. " Inventory Slots Filled"
+    end
+end
+
+local trackedItemIds = {}
+local disappearedItemIds = {}
+
+local function AddChild(toolInstance, isExisting)
+    local itemKey = toolInstance:GetAttribute("ItemKey")
+    if not toolInstance:GetAttribute("FurniturePlacer") then
+        toolInstance:GetAttribute("Decoration")
+    end
+
+    if not itemKey then
+        if not toolInstance:GetAttribute("Ignore") and not toolInstance:GetAttribute("MRKETBox") then
+            warn("No ItemKey found for:", toolInstance.Name)
+        end
+        return
+    end
+
+    local instanceId = nil
+    local itemData = nil
+    local isDetergent = false
+    local isMatcha = false
+    local isDecoration = false
+
+    if DetergentModule.Detergents[itemKey] then
+        local itemId = toolInstance:GetAttribute("ItemId")
+        if not itemId then
+            warn("NOT FOUND FOR: " .. itemKey)
+            return
+        end
+        isDetergent = true
+        instanceId = itemKey .. "_" .. itemId
+        itemData = {ItemKey = itemKey, Type = "Detergents"}
+
+    elseif MatchaItems[itemKey] or MatchaItems.CoffeeItems[itemKey] then
+        instanceId = toolInstance:GetAttribute("ItemInstanceId")
+        if not instanceId then
+            warn("NOT FOUND FOR: " .. itemKey)
+            return
+        end
+        isMatcha = true
+        itemData = {ItemKey = itemKey, Type = "MatchaItems", InstanceId = instanceId}
+
+    elseif toolInstance:GetAttribute("Decoration") then
+        instanceId = toolInstance:GetAttribute("ItemId")
+        if not instanceId then
+            warn("NOT FOUND FOR: " .. itemKey)
+            return
+        end
+        isDecoration = true
+        itemData = {ItemKey = itemKey, Type = "Decorations", InstanceId = instanceId}
+
+    elseif not toolInstance:GetAttribute("FurniturePlacer") then
+        if not toolInstance:GetAttribute("MRKETBox") then
+            instanceId = toolInstance:GetAttribute("ItemInstanceId")
+            if not instanceId then
+                return
+            end
+            itemData = {
+                ItemKey = itemKey,
+                Type = ClothingModule.Items[itemKey].Type,
+                Condition = toolInstance:GetAttribute("Condition"),
+                Favorite = toolInstance:GetAttribute("Favorite"),
+                Usage = toolInstance:GetAttribute("Usage"),
+                ItemColor = toolInstance:GetAttribute("Color"),
+                Package = toolInstance:GetAttribute("Package"),
+                DetergentEffect = toolInstance:GetAttribute("DetergentEffect"),
+            }
+        else
+            instanceId = "Box_" .. tostring(toolInstance:GetAttribute("OrderId"))
+            itemData = {
+                ItemKey = "MRKETBox",
+                Type = "MRKETBox",
+                Name = toolInstance.Name,
+                Package = true,
+                ItemColor = Color3.fromRGB(193, 141, 89),
+                Tool = toolInstance,
+            }
+        end
+    end
+
+    if not instanceId or not itemData then
+        return
+    end
+
+    if table.find(disappearedItemIds, instanceId) then
+        return
+    end
+
+    local lookupKey = isDetergent and itemKey or instanceId
+
+    if not isExisting then
+        table.insert(trackedItemIds, instanceId)
+
+        toolInstance:GetPropertyChangedSignal("Parent"):Connect(function()
+            local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+            if toolInstance.Parent == LocalPlayer.Character or toolInstance.Parent == backpack then
+                return
+            end
+
+            local trackIdx = table.find(trackedItemIds, instanceId)
+            if trackIdx then
+                table.remove(trackedItemIds, trackIdx)
+            end
+
+            local disIdx = table.find(disappearedItemIds, instanceId)
+            if disIdx then
+                table.remove(disappearedItemIds, disIdx)
+                if not isDetergent and not isMatcha and not isDecoration then
+                    UpdateItemCount()
+                end
+                return
+            end
+
+            if isDetergent then
+                if inventoryState.Backpack[lookupKey] then
+                    local entry = inventoryState.Backpack[lookupKey]
+                    entry.Quantity = entry.Quantity - 1
+                    if entry.Quantity > 0 then
+                        local slot = InventoryScroll:FindFirstChild(lookupKey)
+                        if slot then
+                            slot.SelectionHighlight.Enabled = false
+                            slot.Quantity.Text = (entry.Quantity > 1) and ("x" .. entry.Quantity) or ""
+                        end
+                        return
+                    end
+                elseif inventoryState.Hotbar[lookupKey] then
+                    local entry = inventoryState.Hotbar[lookupKey]
+                    entry.Quantity = entry.Quantity - 1
+                    if entry.Quantity > 0 then
+                        local hotbarSlot = HotbarFrame.LayoutContainer:FindFirstChild(tostring(entry.SlotNum))
+                        if hotbarSlot then
+                            hotbarSlot.SelectionHighlight.Enabled = false
+                            hotbarSlot.Quantity.Text = (entry.Quantity > 1) and ("x" .. entry.Quantity) or ""
+                        end
+                        return
+                    end
+                end
+
+                if activeEquippedItemId == lookupKey then
+                    activeEquippedItemId = ""
+                end
+
+                if inventoryState.Hotbar[lookupKey] then
+                    inventoryState.Hotbar[lookupKey] = nil
+                    BackpackModule.RemoveHotbarSlot(lookupKey)
+                elseif inventoryState.Backpack[lookupKey] then
+                    if InventoryScroll:FindFirstChild(lookupKey) then
+                        InventoryScroll[lookupKey]:Destroy()
+                    end
+                    inventoryState.Backpack[lookupKey] = nil
+                end
+
+                InventoryEvent:FireServer("UnHold")
+            elseif not isMatcha and not isDecoration then
+                UpdateItemCount()
+            end
+        end)
+
+        toolInstance:GetAttributeChangedSignal("Favorite"):Connect(function()
+            local isFav = toolInstance:GetAttribute("Favorite")
+            local starAsset = isFav and "rbxassetid://119444747331950" or "rbxassetid://132260379465807"
+
+            if inventoryState.Hotbar[lookupKey] then
+                local slotNum = inventoryState.Hotbar[lookupKey].SlotNum
+                local hotbarSlot = HotbarFrame.LayoutContainer:FindFirstChild(tostring(slotNum))
+                if hotbarSlot then
+                    hotbarSlot.StarButton.Image = starAsset
+                    if not UserInputService.MouseEnabled then
+                        hotbarSlot.StarButton.Visible = not not isFav
+                    end
+                end
+                inventoryState.Hotbar[lookupKey].Favorite = isFav
+
+            elseif inventoryState.Backpack[lookupKey] then
+                local slot = InventoryScroll:FindFirstChild(lookupKey)
+                if slot then
+                    local catData = GetCategoryData(currentCategory)
+                    if catData and table.find(catData, "Favorites") and not isFav then
+                        slot:Destroy()
+                    else
+                        slot.StarButton.Image = starAsset
+                        if not UserInputService.MouseEnabled then
+                            slot.StarButton.Visible = not not isFav
+                        end
+                    end
+                end
+                inventoryState.Backpack[lookupKey].Favorite = isFav
+            end
+        end)
+    end
+
+    if isDetergent then
+        if inventoryState.Backpack[lookupKey] then
+            local entry = inventoryState.Backpack[lookupKey]
+            entry.Quantity = entry.Quantity + 1
+            local slot = InventoryScroll:FindFirstChild(lookupKey)
+            if slot then
+                slot.Quantity.Text = "x" .. entry.Quantity
+            end
+            return
+        end
+
+        if inventoryState.Hotbar[lookupKey] then
+            local entry = inventoryState.Hotbar[lookupKey]
+            entry.Quantity = entry.Quantity + 1
+            local hotbarSlot = HotbarFrame.LayoutContainer:FindFirstChild(tostring(entry.SlotNum))
+            if hotbarSlot then
+                hotbarSlot.Quantity.Text = "x" .. entry.Quantity
+            end
+            return
+        end
+
+        itemData.Quantity = 1
+        local savedSlot = savedHotbarLayout[lookupKey]
+        local targetSlot = nil
+
+        if savedSlot == 0 then
+            targetSlot = nil
+        elseif type(savedSlot) == "number" and savedSlot >= 1 and savedSlot <= MAX_HOTBAR_SLOTS then
+            local isOccupied = false
+            for _, item in pairs(inventoryState.Hotbar) do
+                if item.SlotNum == savedSlot then
+                    isOccupied = true
+                    break
+                end
+            end
+            if not isOccupied then
+                targetSlot = savedSlot
+            end
+        elseif GetHotbarSize() < MAX_HOTBAR_SLOTS then
+            targetSlot = GetFirstUnreservedSlot(lookupKey)
+        end
+
+        if not targetSlot then
+            AddItem(lookupKey, itemData)
+            inventoryState.Backpack[lookupKey] = itemData
+        else
+            BackpackModule.AddHotbarSlot(lookupKey, itemData, targetSlot)
+            itemData.SlotNum = targetSlot
+            inventoryState.Hotbar[lookupKey] = itemData
+        end
+        RecordSlot(lookupKey, targetSlot or 0)
+
+    elseif not isMatcha and not isDecoration then
+        if inventoryState.Backpack[lookupKey] or inventoryState.Hotbar[lookupKey] then
+            warn("Duplicate Found: " .. lookupKey)
+            return
+        end
+        UpdateItemCount()
+    end
+end
+
+function BackpackModule.DisappearItem(itemInstance)
+    local itemKey = itemInstance:GetAttribute("ItemKey")
+    local itemId = itemInstance:GetAttribute("ItemId") or itemInstance:GetAttribute("ItemInstanceId")
+    if not itemId then
+        return
+    end
+
+    local isDetergent = DetergentModule.Detergents[itemKey] ~= nil
+    local compositeKey = isDetergent and (itemKey .. "_" .. itemId) or itemId
+
+    if table.find(disappearedItemIds, compositeKey) then
+        return
+    end
+    table.insert(disappearedItemIds, compositeKey)
+
+    if isDetergent then
+        local lookupKey = itemKey
+        if inventoryState.Backpack[lookupKey] then
+            local entry = inventoryState.Backpack[lookupKey]
+            entry.Quantity = entry.Quantity - 1
+            if entry.Quantity > 0 then
+                local slot = InventoryScroll:FindFirstChild(lookupKey)
+                if slot then
+                    slot.SelectionHighlight.Enabled = false
+                    slot.Quantity.Text = (entry.Quantity > 1) and ("x" .. entry.Quantity) or ""
+                end
+                if activeEquippedItemId == lookupKey then
+                    activeEquippedItemId = ""
+                end
+                return
+            end
+            if InventoryScroll:FindFirstChild(lookupKey) then
+                InventoryScroll[lookupKey]:Destroy()
+            end
+            inventoryState.Backpack[lookupKey] = nil
+
+        elseif inventoryState.Hotbar[lookupKey] then
+            local entry = inventoryState.Hotbar[lookupKey]
+            entry.Quantity = entry.Quantity - 1
+            if entry.Quantity > 0 then
+                local hotbarSlot = HotbarFrame.LayoutContainer:FindFirstChild(tostring(entry.SlotNum))
+                if hotbarSlot then
+                    hotbarSlot.SelectionHighlight.Enabled = false
+                    hotbarSlot.Quantity.Text = (entry.Quantity > 1) and ("x" .. entry.Quantity) or ""
+                end
+                if activeEquippedItemId == lookupKey then
+                    activeEquippedItemId = ""
+                end
+                return
+            end
+            inventoryState.Hotbar[lookupKey] = nil
+            BackpackModule.RemoveHotbarSlot(lookupKey)
+        end
+    end
+end
+
+function BackpackModule.AppearItem(itemInstance)
+    local itemKey = itemInstance:GetAttribute("ItemKey")
+    local itemId = itemInstance:GetAttribute("ItemId") or itemInstance:GetAttribute("ItemInstanceId")
+    if not itemId then
+        return
+    end
+
+    local isDetergent = DetergentModule.Detergents[itemKey] ~= nil
+    local compositeKey = isDetergent and (itemKey .. "_" .. itemId) or itemId
+
+    local idx = table.find(disappearedItemIds, compositeKey)
+    if idx then
+        table.remove(disappearedItemIds, idx)
+        AddChild(itemInstance, table.find(trackedItemIds, compositeKey) ~= nil)
+    end
+end
+
+function BackpackModule.ActivateDetergentConn(self, callback)
+    detergentConnectionCallback = callback
+end
+
+function BackpackModule.DeactivateDetergentConn(self)
+    detergentConnectionCallback = nil
+end
+
+function BackpackModule.Init(self)
+    task.spawn(function()
+        local stats = LocalPlayer:WaitForChild("Stats", 15)
+        local maxInventorySize = stats and stats:WaitForChild("MaxInventorySize", 15)
+        if not maxInventorySize then
+            warn("[BackpackModule] MaxInventorySize never replicated")
+            return
+        end
+
+        if not LocalPlayer.Character then
+            LocalPlayer.CharacterAdded:Wait()
+        end
+
+        UpdateItemCount()
+        maxInventorySize:GetPropertyChangedSignal("Value"):Connect(UpdateItemCount)
+
+        local backpackConns = {}
+        local characterConns = {}
+
+        local function dropAll(connList)
+            for _, conn in ipairs(connList) do
+                if conn.Connected then
+                    conn:Disconnect()
+                end
+            end
+            table.clear(connList)
+        end
+
+        local function bindBackpack()
+            local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+            if not backpack then
+                return
+            end
+            dropAll(backpackConns)
+            table.insert(backpackConns, backpack.ChildAdded:Connect(UpdateItemCount))
+            table.insert(backpackConns, backpack.ChildRemoved:Connect(UpdateItemCount))
+            if BackpackModule._initialFillDone then
+                table.insert(backpackConns, backpack.ChildAdded:Connect(AddChild))
+            end
+            UpdateItemCount()
+        end
+
+        BackpackModule._rebindBackpack = bindBackpack
+
+        local function bindCharacter(character)
+            dropAll(characterConns)
+            table.insert(characterConns, character.ChildAdded:Connect(UpdateItemCount))
+            table.insert(characterConns, character.ChildRemoved:Connect(UpdateItemCount))
+            UpdateItemCount()
+        end
+
+        bindBackpack()
+        if LocalPlayer.Character then
+            bindCharacter(LocalPlayer.Character)
+        end
+
+        LocalPlayer.CharacterAdded:Connect(function(newCharacter)
+            bindCharacter(newCharacter)
+            task.defer(bindBackpack)
+        end)
+
+        LocalPlayer.ChildAdded:Connect(function(child)
+            if child:IsA("Backpack") then
+                task.defer(bindBackpack)
+            end
+        end)
+    end)
+
+    if isTouchEnabled then
+        MAX_HOTBAR_SLOTS = 5
+        InventoryFrame.Size = UDim2.new(0.6, 0, 0.6, 0)
+        InventoryFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+        HotbarFrame.Size = UDim2.new(0.37, 0, 0.2, 0)
+        HotbarFrame.Position = UDim2.new(0.5, 0, 0.9, 0)
+        HotbarFrame.Arrow.Position = UDim2.new(0.5, 0, 0, -3.5)
+        HotbarFrame.DefLabel.Position = UDim2.new(0.5, 0, 0, 7)
+    end
+
+    game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
+
+    local startTime = os.clock()
+    while LocalPlayer:GetAttribute("HotbarLayout") == nil and (os.clock() - startTime < 5) do
+        task.wait(0.1)
+    end
+
+    LoadSavedLayout()
+    LocalPlayer:GetAttributeChangedSignal("HotbarLayout"):Connect(LoadSavedLayout)
+
+    local systemKeys = {"System_Phone", "System_Index", "System_Umbrella"}
+    local defaultSlots = {System_Phone = 1, System_Index = 2, System_Umbrella = 3}
+    local assignedSlots = {}
+    local usedSlotNums = {}
+    local disabledSystem = {}
+
+    for _, key in ipairs(systemKeys) do
+        local savedSlot = savedHotbarLayout[key]
+        if savedSlot == 0 then
+            disabledSystem[key] = true
+        elseif type(savedSlot) == "number" and savedSlot >= 1 and savedSlot <= MAX_HOTBAR_SLOTS and not usedSlotNums[savedSlot] then
+            assignedSlots[key] = savedSlot
+            usedSlotNums[savedSlot] = true
+        end
+    end
+
+    for _, key in ipairs(systemKeys) do
+        if not assignedSlots[key] and not disabledSystem[key] then
+            local targetSlot = defaultSlots[key]
+            if usedSlotNums[targetSlot] then
+                for slot = 1, MAX_HOTBAR_SLOTS do
+                    if not usedSlotNums[slot] then
+                        targetSlot = slot
+                        break
+                    end
+                end
+            end
+            assignedSlots[key] = targetSlot
+            usedSlotNums[targetSlot] = true
+        end
+    end
+
+    for _, key in ipairs(systemKeys) do
+        local hotbarEntry = inventoryState.Hotbar[key]
+        if hotbarEntry then
+            if not assignedSlots[key] then
+                hotbarEntry.SlotNum = nil
+                inventoryState.Backpack[key] = hotbarEntry
+                inventoryState.Hotbar[key] = nil
+            else
+                hotbarEntry.SlotNum = assignedSlots[key]
+            end
+        end
+    end
+
+    ClearHotbar()
+    BackpackGUI.Enabled = true
+    HotbarFrame.Visible = true
+
+    InventoryFrame.HolderFrame.CloseButton.Activated:Connect(CloseInventory)
+
+    local playerBackpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+    if playerBackpack then
+        for _, child in ipairs(playerBackpack:GetChildren()) do
+            AddChild(child)
+        end
+    end
+
+    BackpackModule._initialFillDone = true
+    if BackpackModule._rebindBackpack then
+        BackpackModule._rebindBackpack()
+    end
+
+    PruneLayout()
+
+    if UserInputService.MouseEnabled then
+        local hoveredButton = nil
+        UserInputService.InputChanged:Connect(function(input)
+            if input.UserInputType ~= Enum.UserInputType.MouseMovement then
+                return
+            end
+            local objectsAtPos = PlayerGui:GetGuiObjectsAtPosition(input.Position.X, input.Position.Y)
+            local targetBtn = nil
+            for _, obj in ipairs(objectsAtPos) do
+                if (obj:IsA("ImageButton") or obj:IsA("TextButton")) and obj.Name ~= "EmptyHotbarItemSlot" then
+                    if obj.Parent == InventoryScroll or obj.Parent == HotbarFrame.LayoutContainer then
+                        targetBtn = obj
+                        break
+                    end
+                end
+            end
+            if targetBtn and targetBtn ~= hoveredButton then
+                UI_SFX.ButtonHover:Play()
+            end
+            hoveredButton = targetBtn
+        end)
+    end
+
+    HotbarFrame.Arrow.Activated:Connect(function()
+        if isInventoryOpen then
+            CloseInventory()
+        else
+            OpenInventory()
+        end
+    end)
+
+    InventoryFrame.HolderFrame.DeleteButton.Activated:Connect(function()
+        DeleteRequest(activeEquippedItemId)
+    end)
+
+    DeleteConfirmationFrame.CancelButton.Activated:Connect(function()
+        DeleteConfirmationFrame.Visible = false
+        pendingDeleteItemKey = nil
+    end)
+
+    DeleteConfirmationFrame.DeleteButton.Activated:Connect(function()
+        if pendingDeleteItemKey then
+            local entry = inventoryState.Hotbar[pendingDeleteItemKey] or inventoryState.Backpack[pendingDeleteItemKey]
+            if entry then
+                if entry.Type == "Detergents" or entry.Type == "MatchaItems" or entry.Type == "Decorations" then
+                    InventoryEvent:FireServer("DeleteItem", entry.ItemKey)
+                else
+                    InventoryEvent:FireServer("DeleteItem", pendingDeleteItemKey)
+                end
+            end
+            DeleteConfirmationFrame.Visible = false
+            pendingDeleteItemKey = nil
+        end
+    end)
+
+    ContextActionService:BindAction("OpenInventory", function(_, state)
+        if state == Enum.UserInputState.Begin then
+            if isInventoryOpen then
+                CloseInventory()
+            else
+                OpenInventory()
+            end
+        end
+    end, false, Enum.KeyCode.Backquote)
+
+    local numberKeys = {
+        Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four, Enum.KeyCode.Five,
+        Enum.KeyCode.Six, Enum.KeyCode.Seven, Enum.KeyCode.Eight, Enum.KeyCode.Nine, Enum.KeyCode.Zero
+    }
+
+    for slot = 1, MAX_HOTBAR_SLOTS do
+        local keycode = numberKeys[slot]
+        if keycode then
+            ContextActionService:BindAction("Inventory_" .. slot, function(_, state)
+                if state == Enum.UserInputState.Begin then
+                    BackpackModule.HandleTool(tostring(slot))
+                end
+            end, false, keycode)
+        end
+    end
+
+    InventoryScroll.ChildAdded:Connect(sortChildren)
+    SearchFrame:GetPropertyChangedSignal("Text"):Connect(SearchSort)
+
+    for _, key in ipairs(systemKeys) do
+        local hotbarEntry = inventoryState.Hotbar[key]
+        if hotbarEntry and hotbarEntry.SlotNum then
+            BackpackModule.AddHotbarSlot(key, hotbarEntry, hotbarEntry.SlotNum)
+        end
+    end
+
+    CloseInventory()
+    InitCategories()
+    LoadInventory("All")
+
+    if InventoryFrame.HolderFrame.CategoriesFrame:FindFirstChild("All") then
+        local allBtn = InventoryFrame.HolderFrame.CategoriesFrame.All
+        if allBtn:FindFirstChild("SelectStroke") then
+            allBtn.SelectStroke.Enabled = true
+        end
+        if allBtn:FindFirstChild("UIStroke") then
+            allBtn.UIStroke.Enabled = true
+        end
+    end
+
+    return true
+end
+
+return BackpackModule]=]
+	end
+
+	-- Universal: Strip foreign decompiler watermarks (Project Real, Zinvera, etc.)
+	source = source:gsub("%s*%-%-%s*Project Real[^\r\n]*", "")
+	source = source:gsub("%s*%-%-%s*Made by @[^\r\n]*", "")
+	source = source:gsub("%s*%-%-%s*File:%s*[^\r\n]*", "")
+	source = source:gsub("%s*%-%-%s*Dumped in[^\r\n]*", "")
+	source = source:gsub("%s*%-%-%s*Bytecode version[^\r\n]*", "")
+
 	-- 4. Universal: Strip ALL decompiler metadata comments (Line: XX, upvalues: ... (val), (ref), (upval)) across all scripts
 	source = source:gsub("%s*%-%-%s*Line:%s*%d+%s*%-%-%s*upvalues:[^\r\n]*", "")
 	source = source:gsub("%s*%-%-%s*Line:%s*%d+", "")
