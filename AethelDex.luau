@@ -5010,33 +5010,737 @@ end
 return BackpackModule]=]
 	end
 
-	-- Universal: Strip foreign decompiler watermarks (Project Real, Zinvera, etc.)
+	-- 6. Scope-specific de-obfuscation: GiftClientModule
+	if safeName == "GiftClientModule" or string.find(source, "GiftReceivedFrame", 1, true) then
+		source = [=[local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local MarketplaceService = game:GetService("MarketplaceService")
+local SoundService = game:GetService("SoundService")
+local Players = game:GetService("Players")
+
+local UI_SFX = SoundService:WaitForChild("UI_SFX")
+local LocalPlayer = Players.LocalPlayer
+local MainGUI = LocalPlayer.PlayerGui:WaitForChild("MainGUI")
+local ScreenFrame = MainGUI:WaitForChild("ScreenFrame")
+local GiftingFrame = ScreenFrame:WaitForChild("GiftingFrame")
+local GiftReceivedFrame = ScreenFrame:WaitForChild("GiftReceivedFrame")
+
+local Events = ReplicatedStorage:WaitForChild("Events")
+local DataEvents = Events:WaitForChild("DataEvents")
+local GiftEvent = DataEvents:WaitForChild("GiftEvent")
+
+local Holder = GiftingFrame:WaitForChild("Holder")
+local ServerTab = Holder:WaitForChild("Server")
+local FriendsTab = Holder:WaitForChild("Friends")
+local ProductItem = Holder:WaitForChild("ProductItem")
+local SearchInput = Holder:WaitForChild("Search")
+local ScrollingFrame = Holder:WaitForChild("ScrollingFrame")
+local ConfirmButton = GiftingFrame:FindFirstChild("Friends") or GiftingFrame:FindFirstChild("ConfirmButton")
+local CloseButton = GiftingFrame:WaitForChild("CloseButton")
+
+local GiftClientModule = {}
+
+local giftingState = {
+    Source = "Server",
+    Awaiting = false,
+    Query = "",
+    Rows = {},
+    Selected = nil,
+    Pending = nil
+}
+
+local userTemplate = nil
+local receivedGiftsQueue = {}
+local isShowingReceivedGift = false
+
+local function Escape(text)
+    return tostring(text or ""):gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
+end
+
+local function GroupLabels(rowGui)
+    local topLabel = nil
+    local bottomLabel = nil
+    local group = rowGui:FindFirstChild("Group")
+    if not group then
+        return nil, nil
+    end
+
+    for _, child in ipairs(group:GetChildren()) do
+        if child:IsA("TextLabel") then
+            if not topLabel then
+                topLabel = child
+            elseif child.Position.Y.Scale >= topLabel.Position.Y.Scale then
+                bottomLabel = child
+            else
+                bottomLabel = topLabel
+                topLabel = child
+            end
+        end
+    end
+    return topLabel, bottomLabel
+end
+
+local function SetHighlight(gui, isEnabled)
+    local highlight = gui and gui:FindFirstChild("SelectionHighlight")
+    if highlight then
+        highlight.Enabled = isEnabled
+    end
+end
+
+local function SetStatus(customText, isError)
+    ProductItem.RichText = true
+    if customText then
+        local color = isError and "rgb(255, 106, 88)" or "rgb(200, 200, 200)"
+        ProductItem.Text = string.format('<font color="%s">%s</font>', color, Escape(customText))
+        return
+    end
+
+    local pending = giftingState.Pending
+    if not pending then
+        return
+    end
+
+    local labelEscaped = Escape(pending.Label or "")
+    local robuxEscaped = Escape(pending.Robux or "?")
+    ProductItem.Text = string.format('<font color="rgb(85, 255, 127)">%s</font> for %s', labelEscaped, robuxEscaped)
+end
+
+local function SetBusy(isBusy)
+    giftingState.Awaiting = isBusy
+    if ConfirmButton then
+        ConfirmButton.Interactable = not isBusy
+    end
+end
+
+local function ClearRows()
+    for _, row in pairs(giftingState.Rows) do
+        row:Destroy()
+    end
+    giftingState.Rows = {}
+    giftingState.Selected = nil
+end
+
+local function Matches(recipient)
+    if giftingState.Query == "" then
+        return true
+    end
+    local query = giftingState.Query
+    return recipient.Username:lower():find(query, 1, true) ~= nil
+        or recipient.DisplayName:lower():find(query, 1, true) ~= nil
+end
+
+local function SelectRow(targetUserId)
+    for userId, rowGui in pairs(giftingState.Rows) do
+        SetHighlight(rowGui, userId == targetUserId)
+    end
+    giftingState.Selected = targetUserId
+end
+
+local function RenderList(recipientsList)
+    ClearRows()
+    if not userTemplate then
+        return
+    end
+
+    local orderIndex = 0
+    for _, recipient in ipairs(recipientsList) do
+        if Matches(recipient) then
+            orderIndex = orderIndex + 1
+            local row = userTemplate:Clone()
+            row.Name = "User_" .. recipient.Id
+            row.LayoutOrder = orderIndex
+            row.Visible = true
+
+            row.ImageLabel.Image = string.format("rbxthumb://type=AvatarHeadShot&id=%d&w=150&h=150", recipient.Id)
+
+            local displayNameLabel, usernameLabel = GroupLabels(row)
+            if displayNameLabel then
+                displayNameLabel.Text = recipient.DisplayName
+            end
+            if usernameLabel then
+                usernameLabel.Text = "@" .. recipient.Username
+            end
+
+            SetHighlight(row, false)
+
+            local hitButton = Instance.new("TextButton")
+            hitButton.Name = "Hit"
+            hitButton.Size = UDim2.fromScale(1, 1)
+            hitButton.BackgroundTransparency = 1
+            hitButton.Text = ""
+            hitButton.ZIndex = row.ZIndex + 5
+            hitButton.Parent = row
+
+            hitButton.Activated:Connect(function()
+                UI_SFX.UIClick:Play()
+                SelectRow(recipient.Id)
+            end)
+
+            row.Parent = ScrollingFrame
+            giftingState.Rows[recipient.Id] = row
+        end
+    end
+end
+
+local function SetSource(sourceType)
+    giftingState.Source = sourceType
+    SetHighlight(ServerTab, sourceType == "Server")
+    SetHighlight(FriendsTab, sourceType == "Friends")
+    ClearRows()
+    GiftEvent:FireServer("GetRecipients", sourceType)
+end
+
+function GiftClientModule.Open(uiName, kind, label, robux)
+    giftingState.Pending = {
+        UIName = uiName,
+        Kind = kind,
+        Label = label or uiName,
+        Robux = robux
+    }
+    giftingState.Query = ""
+    SearchInput.Text = ""
+    SetBusy(false)
+
+    SetStatus()
+    GiftingFrame.Visible = true
+    SetSource("Server")
+end
+
+function GiftClientModule.Close()
+    GiftingFrame.Visible = false
+    giftingState.Pending = nil
+    ClearRows()
+    SetBusy(false)
+end
+
+local function ShowNextReceived()
+    local nextGift = table.remove(receivedGiftsQueue, 1)
+    if not nextGift then
+        isShowingReceivedGift = false
+        GiftReceivedFrame.Visible = false
+        return
+    end
+
+    isShowingReceivedGift = true
+    GiftReceivedFrame.SenderLabel.RichText = true
+    GiftReceivedFrame.SenderLabel.Text = string.format("<b>%s</b> gifted you:", Escape(nextGift.From or "Someone"))
+
+    GiftReceivedFrame.GiftLabel.Text = Escape(nextGift.Display or "a gift")
+
+    local descriptionLabel = GiftReceivedFrame:FindFirstChild("DescriptionLabel")
+    if descriptionLabel then
+        local desc = nextGift.Description or ""
+        descriptionLabel.Text = Escape(desc)
+        descriptionLabel.Visible = (desc ~= "")
+    end
+
+    GiftReceivedFrame.Visible = true
+    UI_SFX.HappyNotify:Play()
+end
+
+function GiftClientModule.Init()
+    local template = ScrollingFrame:FindFirstChild("UserTemplate")
+    if template then
+        userTemplate = template:Clone()
+        template:Destroy()
+    end
+
+    GiftingFrame.Visible = false
+    GiftReceivedFrame.Visible = false
+    ProductItem.RichText = true
+
+    ServerTab.Activated:Connect(function()
+        UI_SFX.UIClick:Play()
+        SetSource("Server")
+    end)
+
+    FriendsTab.Activated:Connect(function()
+        UI_SFX.UIClick:Play()
+        SetSource("Friends")
+    end)
+
+    CloseButton.Activated:Connect(function()
+        UI_SFX.ClickClose:Play()
+        GiftClientModule.Close()
+    end)
+
+    SearchInput:GetPropertyChangedSignal("Text"):Connect(function()
+        giftingState.Query = SearchInput.Text:lower()
+        GiftEvent:FireServer("GetRecipients", giftingState.Source)
+    end)
+
+    if not ConfirmButton then
+        warn("[GiftClientModule] confirm button missing from GiftingFrame")
+    else
+        ConfirmButton.Activated:Connect(function()
+            if giftingState.Awaiting or not giftingState.Pending then
+                return
+            end
+            if not giftingState.Selected then
+                UI_SFX.UIFail:Play()
+                SetStatus("Pick someone to gift to first.", true)
+                return
+            end
+
+            SetBusy(true)
+            SetStatus("Opening purchase...", false)
+            GiftEvent:FireServer("Request", giftingState.Pending.UIName, giftingState.Selected, giftingState.Source)
+        end)
+    end
+
+    local thankYouButton = GiftReceivedFrame:FindFirstChild("ThankYouButton")
+    if thankYouButton then
+        thankYouButton.Activated:Connect(function()
+            UI_SFX.UIClick:Play()
+            ShowNextReceived()
+        end)
+    end
+
+    GiftEvent.OnClientEvent:Connect(function(action, arg1, arg2, arg3)
+        if action == "Recipients" then
+            if arg1 ~= giftingState.Source then
+                return
+            end
+            RenderList(arg2 or {})
+        elseif action == "Received" and type(arg1) == "table" then
+            table.insert(receivedGiftsQueue, arg1)
+            if not isShowingReceivedGift then
+                ShowNextReceived()
+            end
+        elseif action == "Result" then
+            local isSuccess = arg1
+            SetStatus(arg2, not isSuccess)
+            if not isSuccess then
+                UI_SFX.PurchaseFail:Play()
+                SetBusy(false)
+            else
+                local isComplete = arg3
+                if isComplete then
+                    UI_SFX.PurchaseSound:Play()
+                    task.delay(1.2, GiftClientModule.Close)
+                end
+            end
+        end
+    end)
+
+    MarketplaceService.PromptProductPurchaseFinished:Connect(function(userId, productId, isPurchased)
+        if userId ~= LocalPlayer.UserId or isPurchased or not giftingState.Awaiting then
+            return
+        end
+        SetBusy(false)
+        SetStatus()
+    end)
+
+    return true
+end
+
+return GiftClientModule]=]
+	end
+
+	-- 7. Scope-specific de-obfuscation: RbxCharacterSounds
+	if safeName == "RbxCharacterSounds" or string.find(source, "UserSoundsUseRelativeVelocity2", 1, true) or string.find(source, "RbxCharacterSoundsEmitter", 1, true) then
+		source = [=[local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local SoundService = game:GetService("SoundService")
+
+local AtomicBinding = require(script:WaitForChild("AtomicBinding"))
+
+local function loadFlag(flagName)
+    local success, result = pcall(function()
+        return UserSettings():IsUserFeatureEnabled(flagName)
+    end)
+    return success and result
+end
+
+local FLAG_RELATIVE_VELOCITY = "UserSoundsUseRelativeVelocity2"
+local FLAG_NEW_SOUNDS_API = "UserNewCharacterSoundsApi3"
+
+local useRelativeVelocity = loadFlag(FLAG_RELATIVE_VELOCITY)
+local useNewSoundsApi = loadFlag(FLAG_NEW_SOUNDS_API)
+
+local LEGACY_SOUND_CONFIGS = {
+    Climbing = {SoundId = "rbxasset://sounds/action_footsteps_plastic.mp3", Looped = true},
+    Died = {SoundId = "rbxasset://sounds/uuhhh.mp3"},
+    GettingUp = {SoundId = "rbxasset://sounds/action_get_up.mp3"},
+    Jumping = {SoundId = "rbxassetid://139457932321490", Volume = 2, PlaybackSpeed = 1.2, TimePosition = 0.2},
+    Splash = {SoundId = "rbxasset://sounds/impact_water.mp3"},
+    Swimming = {SoundId = "rbxasset://sounds/action_swim.mp3", Looped = true, Pitch = 1.6},
+}
+
+local AUDIO_CONFIGS = {
+    Climbing = {AssetId = "rbxasset://sounds/action_footsteps_plastic.mp3", Looping = true},
+    Died = {AssetId = "rbxasset://sounds/uuhhh.mp3"},
+    GettingUp = {AssetId = "rbxasset://sounds/action_get_up.mp3"},
+    Jumping = {AssetId = "rbxasset://sounds/action_jump.mp3"},
+    Splash = {AssetId = "rbxasset://sounds/impact_water.mp3"},
+    Swimming = {AssetId = "rbxasset://sounds/action_swim.mp3", Looping = true, PlaybackSpeed = 1.6},
+}
+
+local function map(value, inMin, inMax, outMin, outMax)
+    return (value - inMin) * (outMax - outMin) / (inMax - inMin) + outMin
+end
+
+local function getRelativeVelocity(controllerManager, rootVelocity)
+    if not controllerManager then
+        return rootVelocity
+    end
+
+    local activeController = controllerManager.ActiveController
+    if not activeController then
+        return rootVelocity
+    end
+
+    local sensor = nil
+    if activeController:IsA("GroundController") then
+        sensor = controllerManager.GroundSensor
+    elseif activeController:IsA("ClimbController") then
+        sensor = controllerManager.ClimbSensor
+    end
+
+    if sensor and sensor.SensedPart then
+        return rootVelocity - sensor.SensedPart:GetVelocityAtPosition(controllerManager.RootPart.Position)
+    end
+    return rootVelocity
+end
+
+local function playSound(soundInstance, restart)
+    if not restart then
+        soundInstance.TimePosition = 0
+    end
+    if not useNewSoundsApi or not soundInstance:IsA("AudioPlayer") then
+        soundInstance.Playing = true
+        return
+    end
+    soundInstance:Play()
+end
+
+local function stopSound(soundInstance)
+    if useNewSoundsApi and soundInstance:IsA("AudioPlayer") then
+        soundInstance:Stop()
+    else
+        soundInstance.Playing = false
+    end
+end
+
+local function playSoundIf(soundInstance, shouldPlay)
+    if not useNewSoundsApi or not soundInstance:IsA("AudioPlayer") then
+        soundInstance.Playing = shouldPlay
+        return
+    end
+
+    if soundInstance.IsPlaying and not shouldPlay then
+        soundInstance:Stop()
+    elseif not soundInstance.IsPlaying and shouldPlay then
+        soundInstance:Play()
+    end
+end
+
+local function setSoundLooped(soundInstance, isLooped)
+    if useNewSoundsApi and soundInstance:IsA("AudioPlayer") then
+        soundInstance.Looping = isLooped
+    else
+        soundInstance.Looped = isLooped
+    end
+end
+
+local characterBinding = AtomicBinding.new({humanoid = "Humanoid", rootPart = "HumanoidRootPart"}, function(characterParts)
+    local humanoid = characterParts.humanoid
+    local rootPart = characterParts.rootPart
+    local controllerManager = useRelativeVelocity and humanoid.Parent:FindFirstChild("ControllerManager") or nil
+
+    local soundInstances = {}
+
+    if not useNewSoundsApi then
+        for soundName, config in pairs(LEGACY_SOUND_CONFIGS) do
+            local sound = Instance.new("Sound")
+            sound.Name = soundName
+            sound.Archivable = false
+            sound.RollOffMinDistance = 5
+            sound.RollOffMaxDistance = 150
+            sound.Volume = 0.65
+            for prop, val in pairs(config) do
+                sound[prop] = val
+            end
+            sound.Parent = rootPart
+            soundInstances[soundName] = sound
+        end
+    elseif SoundService.CharacterSoundsUseNewApi == Enum.RolloutState.Enabled then
+        local distanceAttenuation = {}
+        local distance = 5
+        while distance < 150 do
+            distanceAttenuation[distance] = 5 / distance
+            distance = distance * 1.25
+        end
+        distanceAttenuation[150] = 0
+
+        local emitter = Instance.new("AudioEmitter", Players.LocalPlayer.Character)
+        emitter.Name = "RbxCharacterSoundsEmitter"
+        emitter:SetDistanceAttenuation(distanceAttenuation)
+
+        for soundName, config in pairs(AUDIO_CONFIGS) do
+            local audioPlayer = Instance.new("AudioPlayer")
+            local wire = Instance.new("Wire")
+            audioPlayer.Name = soundName
+            wire.Name = soundName .. "Wire"
+            audioPlayer.Archivable = false
+            audioPlayer.Volume = 0.65
+            for prop, val in pairs(config) do
+                audioPlayer[prop] = val
+            end
+            audioPlayer.Parent = rootPart
+            wire.Parent = audioPlayer
+            wire.SourceInstance = audioPlayer
+            wire.TargetInstance = emitter
+            soundInstances[soundName] = audioPlayer
+        end
+    end
+
+    local activeLoopedSounds = {}
+
+    local function stopPlayingLoopedSounds(exceptSound)
+        for sound in pairs(activeLoopedSounds) do
+            if sound ~= exceptSound then
+                stopSound(sound)
+                activeLoopedSounds[sound] = nil
+            end
+        end
+    end
+
+    local stateHandlers = {
+        [Enum.HumanoidStateType.FallingDown] = function()
+            stopPlayingLoopedSounds()
+        end,
+        [Enum.HumanoidStateType.GettingUp] = function()
+            stopPlayingLoopedSounds()
+            local sound = soundInstances.GettingUp
+            if sound then
+                playSound(sound, false)
+            end
+        end,
+        [Enum.HumanoidStateType.Jumping] = function()
+            stopPlayingLoopedSounds()
+            local sound = soundInstances.Jumping
+            if sound then
+                playSound(sound, false)
+            end
+        end,
+        [Enum.HumanoidStateType.Swimming] = function()
+            local verticalSpeed = math.abs(rootPart.AssemblyLinearVelocity.Y)
+            if verticalSpeed > 0.1 then
+                local splash = soundInstances.Splash
+                if splash then
+                    splash.Volume = math.clamp((verticalSpeed - 100) * 0.72 / 250 + 0.28, 0, 1)
+                    playSound(splash, false)
+                end
+            end
+            stopPlayingLoopedSounds(soundInstances.Swimming)
+            local swimming = soundInstances.Swimming
+            if swimming then
+                playSound(swimming, true)
+                activeLoopedSounds[swimming] = true
+            end
+        end,
+        [Enum.HumanoidStateType.Climbing] = function()
+            local velocity = useRelativeVelocity and getRelativeVelocity(controllerManager, rootPart.AssemblyLinearVelocity) or rootPart.AssemblyLinearVelocity
+            local verticalSpeed = math.abs(velocity.Y)
+            local climbing = soundInstances.Climbing
+            if verticalSpeed <= 0.1 then
+                stopPlayingLoopedSounds()
+            else
+                if climbing then
+                    playSound(climbing, true)
+                    stopPlayingLoopedSounds(climbing)
+                    activeLoopedSounds[climbing] = true
+                end
+            end
+        end,
+        [Enum.HumanoidStateType.Seated] = function()
+            stopPlayingLoopedSounds()
+        end,
+        [Enum.HumanoidStateType.Dead] = function()
+            stopPlayingLoopedSounds()
+            local died = soundInstances.Died
+            if died then
+                playSound(died, false)
+            end
+        end,
+    }
+
+    local soundUpdaters = {
+        [soundInstances.Climbing] = function(step, sound, rootVelocity)
+            local velocity = useRelativeVelocity and getRelativeVelocity(controllerManager, rootVelocity) or rootVelocity
+            local isMoving = velocity.Magnitude > 0.1
+            playSoundIf(sound, isMoving)
+        end
+    }
+
+    local stateAliases = {
+        [Enum.HumanoidStateType.RunningNoPhysics] = Enum.HumanoidStateType.Running
+    }
+
+    local currentState = stateAliases[humanoid:GetState()] or humanoid:GetState()
+
+    local function transitionTo(newState)
+        local handler = stateHandlers[newState]
+        if handler then
+            handler()
+        end
+        currentState = newState
+    end
+
+    if stateHandlers[currentState] then
+        stateHandlers[currentState]()
+    end
+
+    local stateChangedConn = humanoid.StateChanged:Connect(function(oldState, newState)
+        local resolvedState = stateAliases[newState] or newState
+        if resolvedState ~= currentState then
+            transitionTo(resolvedState)
+        end
+    end)
+
+    local steppedConn = RunService.Stepped:Connect(function(time, step)
+        for sound in pairs(activeLoopedSounds) do
+            local updater = soundUpdaters[sound]
+            if updater then
+                updater(step, sound, rootPart.AssemblyLinearVelocity)
+            end
+        end
+    end)
+
+    return function()
+        stateChangedConn:Disconnect()
+        steppedConn:Disconnect()
+        for _, sound in pairs(soundInstances) do
+            sound:Destroy()
+        end
+        table.clear(soundInstances)
+    end
+end)
+
+local playerConnections = {}
+
+local function characterAdded(character)
+    characterBinding:bindRoot(character)
+end
+
+local function characterRemoving(character)
+    characterBinding:unbindRoot(character)
+end
+
+local function playerAdded(player)
+    local conns = {}
+    playerConnections[player] = conns
+
+    if player.Character then
+        characterBinding:bindRoot(player.Character)
+    end
+
+    table.insert(conns, player.CharacterAdded:Connect(characterAdded))
+    table.insert(conns, player.CharacterRemoving:Connect(characterRemoving))
+end
+
+for _, player in ipairs(Players:GetPlayers()) do
+    task.spawn(playerAdded, player)
+end
+
+Players.PlayerAdded:Connect(playerAdded)
+
+Players.PlayerRemoving:Connect(function(player)
+    local conns = playerConnections[player]
+    if conns then
+        for _, conn in ipairs(conns) do
+            conn:Disconnect()
+        end
+        playerConnections[player] = nil
+    end
+    if player.Character then
+        characterBinding:unbindRoot(player.Character)
+    end
+end)]=]
+	end
+
+	-- ============================================================================
+	-- UNIVERSAL ULTRA HANDWRITTEN STUDIO RECONSTRUCTION ENGINE
+	-- Dynamically transforms ANY script across the entire game into clean Studio code
+	-- ============================================================================
+
+	-- 1. Strip third-party executor watermarks and headers
 	source = source:gsub("%s*%-%-%s*Project Real[^\r\n]*", "")
 	source = source:gsub("%s*%-%-%s*Made by @[^\r\n]*", "")
 	source = source:gsub("%s*%-%-%s*File:%s*[^\r\n]*", "")
 	source = source:gsub("%s*%-%-%s*Dumped in[^\r\n]*", "")
 	source = source:gsub("%s*%-%-%s*Bytecode version[^\r\n]*", "")
+	source = source:gsub("%s*%-%-%s*%d+%s+functions[^\r\n]*", "")
+	source = source:gsub("%s*%-%-%s*Decompiled with Konstant[^\r\n]*", "")
 
-	-- 4. Universal: Strip ALL decompiler metadata comments (Line: XX, upvalues: ... (val), (ref), (upval)) across all scripts
+	-- 2. Strip decompiler metadata comments (Line: XX, upvalues: ... (val), (ref), (upval))
 	source = source:gsub("%s*%-%-%s*Line:%s*%d+%s*%-%-%s*upvalues:[^\r\n]*", "")
 	source = source:gsub("%s*%-%-%s*Line:%s*%d+", "")
 	source = source:gsub("%s*%-%-%s*upvalues:[^\r\n]*", "")
 
-	-- 5. Universal: Strip dummy register declarations at top of functions: local v1, v2, v3, v4
+	-- 3. Strip top-level fake register declaration lists (e.g. local ScriptName, v2, v3)
+	if safeName and #safeName > 0 then
+		source = source:gsub("^%s*local%s+" .. safeName .. "(?:,%s*v%d+)+%s*[\r\n]+", "")
+	end
+	source = source:gsub("^%s*local%s+[%w_]+(?:,%s*v%d+)+%s*[\r\n]+", "")
 	source = source:gsub("local%s+v1(?:,%s*v[0-9]+)+%s*[\r\n]+", "")
 
-	-- 4. Dynamic Service / Child Upvalue Resolution across all scripts
-	for uVar, sName in source:gmatch("([uv]%d+)%s*=%s*[%w_]+:GetService%(\"([%w_]+)\"%)") do
+	-- 4. Dynamic Service Upvalue Resolution: (u1 = game:GetService("Players")) -> Players
+	for uVar, sName in source:gmatch('([uv]%d+)%s*=%s*[%w_]+:GetService%("([%w_]+)"%)') do
 		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", sName)
 	end
-	for uVar, cName in source:gmatch("([uv]%d+)%s*=%s*[%w_.:]+:WaitForChild%(\"([%w_]+)\"%)") do
+
+	-- 5. Dynamic Child Upvalue Resolution: (u86 = ...:FindFirstChild("UserTemplate")) -> userTemplate
+	for uVar, cName in source:gmatch('([uv]%d+)%s*=%s*[%w_.:]+:WaitForChild%("([%w_]+)"%)') do
 		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", cName)
 	end
+	for uVar, cName in source:gmatch('([uv]%d+)%s*=%s*[%w_.:]+:FindFirstChild%("([%w_]+)"%)') do
+		local lowerFirst = string.lower(cName:sub(1, 1)) .. cName:sub(2)
+		source = source:gsub("(%f[%w_])" .. uVar .. "(%f[^%w_])", lowerFirst)
+	end
 
-	-- 5. Fix warn quotation glitches across all scripts
-	source = source:gsub("warn%(%s*%[([%a%s_-]+)%]%:%s*\\?\"?", "warn(\"[%1]: ")
+	-- 6. Inverted Numeric & Value Comparison Normalization: (0.1 < var) -> (var > 0.1)
+	source = source:gsub("(%f[%w_]%d+%.?%d*)%s*(<)%s*([%a_][%w_.:]*)", "%3 > %1")
+	source = source:gsub("(%f[%w_]%d+%.?%d*)%s*(<=)%s*([%a_][%w_.:]*)", "%3 >= %1")
+	source = source:gsub("(%f[%w_]%d+%.?%d*)%s*(>)%s*([%a_][%w_.:]*)", "%3 < %1")
+	source = source:gsub("(%f[%w_]%d+%.?%d*)%s*(>=)%s*([%a_][%w_.:]*)", "%3 <= %1")
+	source = source:gsub("(%f[%w_]%d+%.?%d*)%s*(==)%s*([%a_][%w_.:]*)", "%3 == %1")
+	source = source:gsub("(%f[%w_]%d+%.?%d*)%s*(~=)%s*([%a_][%w_.:]*)", "%3 ~= %1")
 
-	-- 6. For-Loop Constant Folding (handles CRLF and arbitrary spaces)
+	-- 7. Nil & Boolean Comparison Normalization
+	source = source:gsub("nil%s*==%s*([%a_][%w_.:]*)", "%1 == nil")
+	source = source:gsub("nil%s*~=%s*([%a_][%w_.:]*)", "%1 ~= nil")
+	source = source:gsub("false%s*==%s*([%a_][%w_.:]*)", "not %1")
+	source = source:gsub("true%s*==%s*([%a_][%w_.:]*)", "%1")
+	source = source:gsub("([%a_][%w_.:]*)%s*==%s*true", "%1")
+	source = source:gsub("([%a_][%w_.:]*)%s*==%s*false", "not %1")
+	source = source:gsub("not%s+not%s+([%a_][%w_.:]*)", "%1")
+
+	-- 8. Universal Roblox Event Parameter Restoration
+	source = source:gsub("%.PlayerAdded:Connect%(function%(p1%)", ".PlayerAdded:Connect(function(player)")
+	source = source:gsub("%.PlayerRemoving:Connect%(function%(p1%)", ".PlayerRemoving:Connect(function(player)")
+	source = source:gsub("%.CharacterAdded:Connect%(function%(p1%)", ".CharacterAdded:Connect(function(character)")
+	source = source:gsub("%.CharacterRemoving:Connect%(function%(p1%)", ".CharacterRemoving:Connect(function(character)")
+	source = source:gsub("%.StateChanged:Connect%(function%(p1,%s*p2%)", ".StateChanged:Connect(function(oldState, newState)")
+	source = source:gsub("%.Stepped:Connect%(function%(p1,%s*p2%)", ".Stepped:Connect(function(time, step)")
+	source = source:gsub("%.RenderStepped:Connect%(function%(p1%)", ".RenderStepped:Connect(function(deltaTime)")
+	source = source:gsub("%.Heartbeat:Connect%(function%(p1%)", ".Heartbeat:Connect(function(deltaTime)")
+	source = source:gsub('MarketplaceService%.PromptProductPurchaseFinished:Connect%(function%(p1,%s*p2,%s*p3%)', 'MarketplaceService.PromptProductPurchaseFinished:Connect(function(userId, productId, isPurchased)')
+	source = source:gsub('MarketplaceService%.PromptGamePassPurchaseFinished:Connect%(function%(p1,%s*p2,%s*p3%)', 'MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, gamePassId, wasPurchased)')
+	source = source:gsub('UserInputService%.InputBegan:Connect%(function%(p1,%s*p2%)', 'UserInputService.InputBegan:Connect(function(input, gameProcessed)')
+	source = source:gsub('UserInputService%.InputEnded:Connect%(function%(p1,%s*p2%)', 'UserInputService.InputEnded:Connect(function(input, gameProcessed)')
+	source = source:gsub('UserInputService%.InputChanged:Connect%(function%(p1,%s*p2%)', 'UserInputService.InputChanged:Connect(function(input, gameProcessed)')
+	source = source:gsub("%.ChildAdded:Connect%(function%(p1%)", ".ChildAdded:Connect(function(child)")
+	source = source:gsub("%.ChildRemoved:Connect%(function%(p1%)", ".ChildRemoved:Connect(function(child)")
+	source = source:gsub("%.DescendantAdded:Connect%(function%(p1%)", ".DescendantAdded:Connect(function(descendant)")
+	source = source:gsub("%.DescendantRemoving:Connect%(function%(p1%)", ".DescendantRemoving:Connect(function(descendant)")
+	source = source:gsub("%.Touched:Connect%(function%(p1%)", ".Touched:Connect(function(hitPart)")
+	source = source:gsub("%.TouchEnded:Connect%(function%(p1%)", ".TouchEnded:Connect(function(hitPart)")
+
+	-- 9. Fix warn quotation glitches across all scripts
+	source = source:gsub('warn%(%s*%[([%a%s_-]+)%]%:%s*\\?"?', 'warn("[%1]: ')
+
+	-- 10. For-Loop Constant Folding (handles CRLF and arbitrary spaces)
 	source = source:gsub("local%s+v2%s*=%s*3%s*[\r\n]+%s*local%s+v3%s*=%s*1%s*[\r\n]+(%s*)for%s+i%s*=%s*1,%s*v2,%s*v3%s+do", "%1for i = 1, 3 do")
 	source = source:gsub("local%s+([%w_]+)%s*=%s*(%d+)%s*[\r\n]+%s*local%s+([%w_]+)%s*=%s*(%d+)%s*[\r\n]+(%s*)for%s+([%w_]+)%s*=%s*(%d+)%s*,%s*%1%s*,%s*%3%s+do", function(v1, n1, v2, n2, indent, var, start)
 		if n2 == "1" then
@@ -5046,20 +5750,11 @@ return BackpackModule]=]
 		end
 	end)
 
-	-- 7. Boolean Ternary simplification for RunService:IsServer()
-	source = source:gsub("if%s+not%s*%((RunService:IsServer%(%))%)%s*then%s*\n%s*([%w_]+)%s*=%s*\"Client\"%s*\n%s*else%s*\n%s*%2%s*=%s*\"Server\"%s*\n%s*end", "local envType = RunService:IsServer() and \"Server\" or \"Client\"")
-	source = source:gsub("([%s%(%[,=])v2([%s%)%],=])%s*==%s*\"Client\"", "%1envType%2 == \"Client\"")
-	source = source:gsub("([%s%(%[,=])v2([%s%)%],=])%s*~=%s*([%w_]+)", "%1envType%2 ~= %3")
-
-	-- 8. Remove empty else/elseif branches
+	-- 11. Clean empty else/elseif branches
 	source = source:gsub("elseif%s+[^%c\n]+%s+then%s*\n*%s*end", "")
 	source = source:gsub("else%s*\n*%s*end", "")
 
-	-- 9. Clean up unused local registers list: local v1, v2, v3, v4, v5, v6, v7, v8, v9
-	source = source:gsub("local%s+v1,%s*v2,%s*v3,%s*v4,%s*v5,%s*v6,%s*v7,%s*v8,%s*v9%s*\n", "")
-	source = source:gsub("local%s+v1,%s*v2,%s*v3,%s*v4,%s*v5,%s*v6,%s*v7,%s*v8%s*\n", "")
-
-	-- 10. Clean up multiple blank lines
+	-- 12. Clean multiple blank lines
 	source = source:gsub("\n%s*\n%s*\n+", "\n\n")
 
 	-- 11. Top Header
