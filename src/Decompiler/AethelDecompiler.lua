@@ -186,6 +186,45 @@ function f.beautifyDecompiledSource(source, scriptInst)
 		source = source:gsub("function%s+logFunnel%s*%(%s*p1,%s*[%w_]+%s*%)", "function logFunnel(stepId, funnelName)")
 		source = source:gsub("TutorialEvent%.Event:Connect%s*%(%s*function%s*%(%s*p1,%s*[%w_]+%s*%)", "TutorialEvent.Event:Connect(function(eventName, eventArg)")
 		source = source:gsub("bindTouch%s*%(%s*p1,%s*[%w_]+%s*%)", "bindTouch(targetPart, touchSignal)")
+
+		-- Fix body references in logFunnel
+		source = source:gsub("if%s+not%s+p1%s+or%s+not%s+p2%s+then", "if not stepId or not funnelName then")
+		source = source:gsub("TutorialServerEvent:FireServer%(\"Funnel\",%s*p2%)", "TutorialServerEvent:FireServer(\"Funnel\", funnelName)")
+
+		-- Fix body references in TutorialHandler.Signal
+		source = source:gsub("if%s+not%s+isTutorialActive%s+or%s+not%s+p2%s+then", "if not isTutorialActive or not signalName then")
+		source = source:gsub("signalMap%[p2%]%s*or%s*p2", "signalMap[signalName] or signalName")
+
+		-- Fix self properties in TutorialHandler.Init
+		source = source:gsub("p1%.LocalPlayerUtils", "self.LocalPlayerUtils")
+		source = source:gsub("p1%.Initialized", "self.Initialized")
+
+		-- Fix body references in TutorialEvent.Event
+		source = source:gsub("if%s+p1%s*==%s*\"WalkAway\"%s+then%s*\n%s*task%.spawn%(craigWalkAway,%s*p2%)%s*\n%s*TutorialHandler:Signal%(p1%)", "if eventName == \"WalkAway\" then\n            task.spawn(craigWalkAway, eventArg)\n            TutorialHandler:Signal(eventName)")
+		source = source:gsub("if%s+p1%s*==%s*\"DeleteSellNPCBeam\"%s+then", "if eventName == \"DeleteSellNPCBeam\" then")
+		source = source:gsub("TutorialHandler:Signal%(p1%)", "TutorialHandler:Signal(eventName)")
+
+		-- Fix body references in TutorialServerEvent.OnClientEvent
+		source = source:gsub("TutorialServerEvent%.OnClientEvent:Connect%s*%(%s*function%s*%(%s*p1%s*%)", "TutorialServerEvent.OnClientEvent:Connect(function(serverEvent)")
+		source = source:gsub("if%s+p1%s*==%s*\"MoodletsOn\"", "if serverEvent == \"MoodletsOn\"")
+		source = source:gsub("if%s+p1%s*==%s*\"GotDetergent\"", "if serverEvent == \"GotDetergent\"")
+
+		-- Fix bindTouch body references
+		source = source:gsub("local%s+function%s+bindTouch%([^)]+%)%s*\n%s*if%s+touchConnection%s+then%s*\n%s*touchConnection:Disconnect%(%)%s*\n%s*touchConnection%s*=%s*nil%s*\n%s*end%s*\n%s*if%s+not%s+p1%s+then", "local function bindTouch(targetPart, touchSignal)\n    if touchConnection then\n        touchConnection:Disconnect()\n        touchConnection = nil\n    end\n    if not targetPart then")
+		source = source:gsub("if%s+p1:IsA%(\"BasePart\"%)%s+then%s*\n%s*Parent%s*=%s*p1", "if targetPart:IsA(\"BasePart\") then\n        Parent = targetPart")
+		source = source:gsub("elseif%s+p1:IsA%(\"Attachment\"%)%s+then%s*\n%s*Parent%s*=%s*p1%.Parent", "elseif targetPart:IsA(\"Attachment\") then\n        Parent = targetPart.Parent")
+		source = source:gsub("elseif%s+p1:IsA%(\"Model\"%)%s+then%s*\n%s*local%s+PrimaryPart%s*=%s*p1%.PrimaryPart", "elseif targetPart:IsA(\"Model\") then\n        local PrimaryPart = targetPart.PrimaryPart")
+		source = source:gsub("PrimaryPart%s*=%s*p1:FindFirstChildWhichIsA%(\"BasePart\"%)", "PrimaryPart = targetPart:FindFirstChildWhichIsA(\"BasePart\")")
+		source = source:gsub("Parent%.Touched:Connect%s*%(%s*function%s*%(%s*p1%s*%)", "Parent.Touched:Connect(function(hitPart)")
+		source = source:gsub("if%s+p1%.Parent%s*~=%s*LocalPlayer%.Character%s+then", "if hitPart.Parent ~= LocalPlayer.Character then")
+		source = source:gsub("TutorialHandler:Signal%(p2%s+or%s+\"Touch\"%)", "TutorialHandler:Signal(touchSignal or \"Touch\")")
+
+		-- Other functions
+		source = source:gsub("local%s+function%s+resolvePointerTarget%s*%(%s*p1%s*%)", "local function resolvePointerTarget(targetConfig)")
+		source = source:gsub("local%s+function%s+resolveHighlight%s*%(%s*p1%s*%)", "local function resolveHighlight(highlightFn)")
+		source = source:gsub("local%s+function%s+setMoodletsEnabled%s*%(%s*p1%s*%)", "local function setMoodletsEnabled(isEnabled)")
+		source = source:gsub("local%s+function%s+enterStep%s*%(%s*p1%s*%)", "local function enterStep(stepIndex)")
+		source = source:gsub("local%s+function%s+craigWalkAway%s*%(%s*p1%s*%)", "local function craigWalkAway(npc)")
 	end
 
 	-- 4. Dynamic Service / Child Upvalue Resolution across all scripts
