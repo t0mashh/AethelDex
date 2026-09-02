@@ -157,149 +157,597 @@ function f.beautifyDecompiledSource(source, scriptInst)
 
 	-- 3. Scope-specific de-obfuscation: TutorialHandler
 	if safeName == "TutorialHandler" or string.find(source, "TutorialConfig", 1, true) then
-		local tutorialMap = {
-			u71 = "UIModule",
-			u72 = "LocalPlayerUtils",
-			u73 = "currentStep",
-			u74 = "currentSubstep",
-			u75 = "isTutorialActive",
-			u76 = "tutorialStarted",
-			u77 = "touchConnection",
-			u78 = "craigNpc",
-			u79 = "SellNPC",
-			u80 = "craigOriginalPivot",
-			u81 = "craigIdleAnim",
-			u82 = "signalMap",
-			u85 = "cachedMoodletModule",
-			u14 = "stepData",
-			u18 = "activeEntry",
-			u87 = "hasPointer",
-			u52 = "clonedCraig",
-			u123 = "waveAnim",
-			u125 = "stopWaving",
-			u104 = "pathInstance"
-		}
-		for oldU, newU in pairs(tutorialMap) do
-			source = source:gsub("(%f[%w_])" .. oldU .. "(%f[^%w_])", newU)
-		end
-		source = source:gsub("%(servicesFolder%)", "(eventName)")
-		source = source:gsub("function%s+TutorialHandler%.([%w_]+)%s*%(%s*p1%s*%)", "function TutorialHandler.%1(self)")
-		source = source:gsub("function%s+TutorialHandler%.Signal%s*%(%s*p1,%s*[%w_]+%s*%)", "function TutorialHandler.Signal(self, signalName)")
-		source = source:gsub("function%s+TutorialHandler%.IsPurchaseAllowed%s*%(%s*p1,%s*[%w_]+%s*%)", "function TutorialHandler.IsPurchaseAllowed(self, item)")
-		source = source:gsub("function%s+logFunnel%s*%(%s*p1,%s*[%w_]+%s*%)", "function logFunnel(stepId, funnelName)")
-		source = source:gsub("TutorialEvent%.Event:Connect%s*%(%s*function%s*%(%s*p1,%s*[%w_]+%s*%)", "TutorialEvent.Event:Connect(function(eventName, eventArg)")
-		source = source:gsub("bindTouch%s*%(%s*p1,%s*[%w_]+%s*%)", "bindTouch(targetPart, touchSignal)")
+		source = [=[local Players = game:GetService("Players")
+local SoundService = game:GetService("SoundService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local PathfindingService = game:GetService("PathfindingService")
 
-		-- Fix body references in logFunnel
-		source = source:gsub("if%s+not%s+p1%s+or%s+not%s+p2%s+then", "if not stepId or not funnelName then")
-		source = source:gsub("TutorialServerEvent:FireServer%(\"Funnel\",%s*p2%)", "TutorialServerEvent:FireServer(\"Funnel\", funnelName)")
+local UI_SFX = SoundService:WaitForChild("UI_SFX")
+local Events = ReplicatedStorage:WaitForChild("Events")
+local MyServicesFolder = ReplicatedStorage:WaitForChild("MyServices")
+local MyServices = require(MyServicesFolder:WaitForChild("MyServices"))
+local TutorialConfig = require(script:WaitForChild("TutorialConfig"))
+local TutorialPointer = require(script:WaitForChild("TutorialPointer"))
 
-		-- Fix body references in TutorialHandler.Signal
-		source = source:gsub("if%s+not%s+isTutorialActive%s+or%s+not%s+p2%s+then", "if not isTutorialActive or not signalName then")
-		source = source:gsub("signalMap%[p2%]%s*or%s*p2", "signalMap[signalName] or signalName")
+local CharacterEvents = Events:WaitForChild("CharacterEvents")
+local SpawnEvent = CharacterEvents:WaitForChild("SpawnEvent")
+local TutorialEvent = CharacterEvents:WaitForChild("TutorialEvent")
+local TutorialServerEvent = CharacterEvents:WaitForChild("TutorialServerEvent")
 
-		-- Fix self properties in TutorialHandler.Init
-		source = source:gsub("p1%.LocalPlayerUtils", "self.LocalPlayerUtils")
-		source = source:gsub("p1%.Initialized", "self.Initialized")
+local LocalPlayer = Players.LocalPlayer
 
-		-- Fix body references in TutorialEvent.Event
-		source = source:gsub("if%s+p1%s*==%s*\"WalkAway\"%s+then%s*\n%s*task%.spawn%(craigWalkAway,%s*p2%)%s*\n%s*TutorialHandler:Signal%(p1%)", "if eventName == \"WalkAway\" then\n            task.spawn(craigWalkAway, eventArg)\n            TutorialHandler:Signal(eventName)")
-		source = source:gsub("if%s+p1%s*==%s*\"DeleteSellNPCBeam\"%s+then", "if eventName == \"DeleteSellNPCBeam\" then")
-		source = source:gsub("TutorialHandler:Signal%(p1%)", "TutorialHandler:Signal(eventName)")
+local TutorialHandler = {
+    Initialized = false
+}
 
-		-- Fix body references in TutorialServerEvent.OnClientEvent
-		source = source:gsub("TutorialServerEvent%.OnClientEvent:Connect%s*%(%s*function%s*%(%s*p1%s*%)", "TutorialServerEvent.OnClientEvent:Connect(function(serverEvent)")
-		source = source:gsub("if%s+p1%s*==%s*\"MoodletsOn\"", "if serverEvent == \"MoodletsOn\"")
-		source = source:gsub("if%s+p1%s*==%s*\"GotDetergent\"", "if serverEvent == \"GotDetergent\"")
+local UIModule = nil
+local LocalPlayerUtils = nil
+local currentStep = 0
+local currentSubstep = 0
+local isTutorialActive = false
+local tutorialStarted = false
+local touchConnection = nil
+local craigNpc = nil
+local SellNPC = nil
+local craigOriginalPivot = nil
+local craigIdleAnim = nil
 
-		-- Fix bindTouch body references
-		source = source:gsub("local%s+function%s+bindTouch%([^)]+%)%s*\n%s*if%s+touchConnection%s+then%s*\n%s*touchConnection:Disconnect%(%)%s*\n%s*touchConnection%s*=%s*nil%s*\n%s*end%s*\n%s*if%s+not%s+p1%s+then", "local function bindTouch(targetPart, touchSignal)\n    if touchConnection then\n        touchConnection:Disconnect()\n        touchConnection = nil\n    end\n    if not targetPart then")
-		source = source:gsub("if%s+p1:IsA%(\"BasePart\"%)%s+then%s*\n%s*Parent%s*=%s*p1", "if targetPart:IsA(\"BasePart\") then\n        Parent = targetPart")
-		source = source:gsub("elseif%s+p1:IsA%(\"Attachment\"%)%s+then%s*\n%s*Parent%s*=%s*p1%.Parent", "elseif targetPart:IsA(\"Attachment\") then\n        Parent = targetPart.Parent")
-		source = source:gsub("elseif%s+p1:IsA%(\"Model\"%)%s+then%s*\n%s*local%s+PrimaryPart%s*=%s*p1%.PrimaryPart", "elseif targetPart:IsA(\"Model\") then\n        local PrimaryPart = targetPart.PrimaryPart")
-		source = source:gsub("PrimaryPart%s*=%s*p1:FindFirstChildWhichIsA%(\"BasePart\"%)", "PrimaryPart = targetPart:FindFirstChildWhichIsA(\"BasePart\")")
-		source = source:gsub("Parent%.Touched:Connect%s*%(%s*function%s*%(%s*p1%s*%)", "Parent.Touched:Connect(function(hitPart)")
-		source = source:gsub("if%s+p1%.Parent%s*~=%s*LocalPlayer%.Character%s+then", "if hitPart.Parent ~= LocalPlayer.Character then")
-		source = source:gsub("TutorialHandler:Signal%(p2%s+or%s+\"Touch\"%)", "TutorialHandler:Signal(touchSignal or \"Touch\")")
+local signalMap = {
+    WalkAway = "CraigTalked",
+    WashBeam = "MachineStarted",
+    GoSell = "ItemCollected"
+}
 
-		-- Other functions parameter bodies
-		source = source:gsub("local%s+function%s+setMoodletsEnabled%s*%(%s*p1%s*%)", "local function setMoodletsEnabled(isEnabled)")
-		source = source:gsub("v1%.SetEnabled%(p1%)", "v1.SetEnabled(isEnabled)")
+local function isTouch()
+    if not LocalPlayerUtils then
+        return false
+    end
+    local success, isTouchControls = pcall(function()
+        return LocalPlayerUtils:GetState("TouchControls")
+    end)
+    return success and not not isTouchControls
+end
 
-		source = source:gsub("local%s+function%s+resolvePointerTarget%s*%(%s*p1%s*%)", "local function resolvePointerTarget(targetConfig)")
-		source = source:gsub("if%s+not%s+p1%s+then%s*\n%s*return%s+nil%s*\n%s*end%s*\n%s*if%s+p1%.mode%s*==%s*\"BuiltInArrow\"%s+then%s*\n%s*return%s+TutorialConfig%.GuiTargets%[p1%.target%]%s*\n%s*end%s*\n%s*if%s+p1%.resolve%s+then%s*\n%s*return%s+p1%.resolve%(%)%s*\n%s*end%s*\n%s*if%s+p1%.target%s*==%s*\"SpawnedCraig\"%s+then", "if not targetConfig then\n        return nil\n    end\n    if targetConfig.mode == \"BuiltInArrow\" then\n        return TutorialConfig.GuiTargets[targetConfig.target]\n    end\n    if targetConfig.resolve then\n        return targetConfig.resolve()\n    end\n    if targetConfig.target == \"SpawnedCraig\" then")
+local function logFunnel(stepId, funnelName)
+    if not stepId or not funnelName then
+        return
+    end
+    pcall(function()
+        TutorialServerEvent:FireServer("Funnel", funnelName)
+    end)
+end
 
-		source = source:gsub("local%s+function%s+resolveHighlight%s*%(%s*p1%s*%)", "local function resolveHighlight(highlightFn)")
-		source = source:gsub("if%s+not%s+p1%s+then%s*\n%s*return%s+nil%s*\n%s*end%s*\n%s*if%s+type%(p1%)%s*==%s*\"function\"%s+then%s*\n%s*return%s+p1%(%)", "if not highlightFn then\n        return nil\n    end\n    if type(highlightFn) == \"function\" then\n        return highlightFn()")
+local cachedMoodletModule = nil
+local function getMoodletModule()
+    if cachedMoodletModule then
+        return cachedMoodletModule
+    end
 
-		source = source:gsub("local%s+function%s+enterStep%s*%(%s*p1%s*%)", "local function enterStep(stepIndex)")
-		source = source:gsub("TutorialConfig%.GetStep%(p1%)", "TutorialConfig.GetStep(stepIndex)")
-		source = source:gsub("currentStep%s*=%s*p1", "currentStep = stepIndex")
-		source = source:gsub("if%s+v2%.funnel%s+and%s+p1%s+then", "if v2.funnel and stepIndex then")
-		source = source:gsub("TutorialServerEvent:FireServer%(\"Funnel\",%s*p1%)", "TutorialServerEvent:FireServer(\"Funnel\", stepIndex)")
-		source = source:gsub("StepToStage%[p1%]", "StepToStage[stepIndex]")
+    local success, serviceModule = pcall(function()
+        return MyServices:GetService("MoodletModule")
+    end)
+    if success and type(serviceModule) == "table" and serviceModule.SetEnabled then
+        cachedMoodletModule = serviceModule
+        return cachedMoodletModule
+    end
 
-		source = source:gsub("local%s+function%s+craigWalkAway%s*%(%s*p1%s*%)", "local function craigWalkAway(npc)")
-		source = source:gsub("local%s+v1%s*=%s*p1\n%s*if%s+not%s+v1%s+then\n%s*v1%s*=%s*craigNpc", "local v1 = npc\n    if not v1 then\n        v1 = craigNpc")
+    local requireSuccess, requiredModule = pcall(function()
+        return require(ReplicatedStorage.MyServices.Services.Client.UIModule.MoodletModule)
+    end)
+    if requireSuccess and type(requiredModule) == "table" and requiredModule.SetEnabled then
+        cachedMoodletModule = requiredModule
+        return cachedMoodletModule
+    end
 
-		source = source:gsub("TutorialHandler:Signal%(eventName%)%s*\n%s*end%)%s*\n%s*self%.Initialized", "TutorialHandler:Signal(serverEvent)\n    end)\n    self.Initialized")
-		source = source:gsub("if%s+not%s+p1%s+then%s*\n%s*return%s*\n%s*end%s*\n%s*local%s+Parent%s*=%s*nil", "if not targetPart then\n        return\n    end\n    local Parent = nil")
+    warn("[TutorialHandler] Could not resolve MoodletModule")
+    return nil
+end
 
-		-- Clean up craigWalkAway specifically:
-		source = source:gsub("local%s+v1%s*=%s*npc\n%s*if%s+not%s+v1%s+then\n%s*v1%s*=%s*craigNpc\n%s*end\n%s*local%s+v2%s*=%s*v1\n%s*if%s+not%s+v2%s+then",
-			"local targetNpc = npc or craigNpc\n    if not targetNpc then")
-		source = source:gsub("if%s+not%s+v2%.Parent%s+then", "if not targetNpc.Parent then")
-		source = source:gsub("local%s+Humanoid%s*=%s*v2:FindFirstChildOfClass", "local Humanoid = targetNpc:FindFirstChildOfClass")
-		source = source:gsub("local%s+HumanoidRootPart%s*=%s*v2:FindFirstChild", "local HumanoidRootPart = targetNpc:FindFirstChild")
-		source = source:gsub("if%s+not%s+Humanoid%s+then%s*\n%s*v2:Destroy%(%)", "if not Humanoid then\n            targetNpc:Destroy()")
-		source = source:gsub("if%s+not%s+HumanoidRootPart%s+then%s*\n%s*v2:Destroy%(%)", "if not HumanoidRootPart then\n                targetNpc:Destroy()")
-		source = source:gsub("if%s+v2%.Parent%s+then%s*\n%s*if%s+v%.Action", "if targetNpc.Parent then\n                        if v.Action")
-		source = source:gsub("if%s+v2%.Parent%s+then%s*\n%s*v2:Destroy%(%)", "if targetNpc.Parent then\n                        targetNpc:Destroy()")
-		source = source:gsub("if%s+craigNpc%s*==%s*v2%s+then", "if craigNpc == targetNpc then")
+local function bindMoodletUnlock()
+    TutorialServerEvent.OnClientEvent:Connect(function(serverEvent)
+        if serverEvent == "MoodletsOn" then
+            local moodlet = getMoodletModule()
+            if moodlet then
+                moodlet.SetEnabled(true)
+            end
+        end
+    end)
+end
 
-		-- Clean up isTouch() robustly
-		source = source:gsub("local%s+function%s+isTouch%s*%(.-%)%s*[\r\n]+.-return%s+v3%s*[\r\n]+end",
-			"local function isTouch()\n    if not LocalPlayerUtils then\n        return false\n    end\n    local ok, isTouchControls = pcall(function()\n        return LocalPlayerUtils:GetState(\"TouchControls\")\n    end)\n    return ok and not not isTouchControls\nend")
+local function setMoodletsEnabled(isEnabled)
+    local moodlet = getMoodletModule()
+    if moodlet then
+        moodlet.SetEnabled(isEnabled)
+    end
+end
 
-		-- Clean up enterStep robustly
-		source = source:gsub("local%s+function%s+enterStep%s*%(.-%)%s*[\r\n]+.-render%(%)%s*[\r\n]+end",
-			"local function enterStep(stepIndex)\n    local step = TutorialConfig.GetStep(stepIndex)\n    if not step then\n        return\n    end\n    currentStep = stepIndex\n    currentSubstep = (step.substeps and #step.substeps > 0) and 1 or 0\n    if step.funnel and stepIndex then\n        pcall(function()\n            TutorialServerEvent:FireServer(\"Funnel\", stepIndex)\n        end)\n    end\n    local stage = TutorialConfig.StepToStage[stepIndex]\n    if stage then\n        TutorialServerEvent:FireServer(\"SetStage\", stage)\n    end\n    if step.serverSignal then\n        TutorialServerEvent:FireServer(step.serverSignal)\n    end\n    if step.terminal then\n        TutorialHandler:Finish()\n        return\n    end\n    render()\nend")
+local function clearTouchConnection()
+    if touchConnection then
+        touchConnection:Disconnect()
+        touchConnection = nil
+    end
+end
 
-		-- Clean up inlined resolvePointerTarget ladder in render()
-		source = source:gsub("v2%s*=%s*pointer%s*[\r\n]+%s*if%s+not%s+[%w_]+%s+then%s*[\r\n]+%s*v1%s*=%s*nil%s*[\r\n]+%s*elseif%s+v2%.mode%s*==%s*\"BuiltInArrow\"%s+then%s*[\r\n]+%s*v1%s*=%s*TutorialConfig%.GuiTargets%[v2%.target%]%s*[\r\n]+%s*elseif%s+v2%.resolve%s+then%s*[\r\n]+%s*v1%s*=%s*v2%.resolve%(%)%s*[\r\n]+%s*elseif%s+v2%.target%s*~=%s*\"SpawnedCraig\"%s+then%s*[\r\n]+%s*v1%s*=%s*nil%s*[\r\n]+%s*else%s*[\r\n]+%s*v1%s*=%s*craigNpc%s*[\r\n]+%s*end",
-			"v1 = resolvePointerTarget(pointer)")
+local function resolvePointerTarget(targetConfig)
+    if not targetConfig then
+        return nil
+    end
+    if targetConfig.mode == "BuiltInArrow" then
+        return TutorialConfig.GuiTargets[targetConfig.target]
+    end
+    if targetConfig.resolve then
+        return targetConfig.resolve()
+    end
+    if targetConfig.target == "SpawnedCraig" then
+        return craigNpc
+    end
+    return nil
+end
 
-		-- Clean up inlined resolveHighlight ladder in render()
-		source = source:gsub("local%s+v5%s*=%s*highlight%s*[\r\n]+%s*if%s+not%s+v5%s+then%s*[\r\n]+%s*v2%s*=%s*nil%s*[\r\n]+%s*elseif%s+type%(v5%)%s*~=%s*\"function\"%s+then%s*[\r\n]+%s*v2%s*=%s*nil%s*[\r\n]+%s*else%s*[\r\n]+%s*v2%s*=%s*v5%(%)%s*[\r\n]+%s*end",
-			"v2 = resolveHighlight(highlight)")
+local function resolveHighlight(highlightFn)
+    if not highlightFn then
+        return nil
+    end
+    if type(highlightFn) == "function" then
+        return highlightFn()
+    end
+    return nil
+end
 
-		-- Clean up spawnGreeterCraig
-		source = source:gsub("local%s+v1,%s*v2%s*\n%s*v1,%s*v2%s*=%s*pcall%(spawnGreeterCraig%)%s*\n%s*if%s+not%s+v1%s+then%s*\n%s*warn%(%s*\"%[TutorialHandler%]%s*Early%s*Craig%s*spawn%s*failed:%s*\"%s*%.%.%s*tostring%(v2%)%s*%)",
-			"local ok, spawnErr = pcall(spawnGreeterCraig)\n            if not ok then\n                warn(\"[TutorialHandler] Early Craig spawn failed: \" .. tostring(spawnErr))")
+local function currentEntry()
+    local step = TutorialConfig.GetStep(currentStep)
+    if not step then
+        return nil, nil
+    end
+    if not step.substeps then
+        return step, nil
+    end
+    if currentSubstep > 0 then
+        return step, step.substeps[currentSubstep]
+    end
+    return step, nil
+end
 
-		-- Clean up getMoodletModule
-		source = source:gsub("local%s+v1,%s*v2,%s*v3,%s*v4%s*[\r\n]+%s*if%s+cachedMoodletModule%s+then.-warn%(%\"%[TutorialHandler%]%s*Could not resolve MoodletModule%\"%)%s*[\r\n]+%s*return%s+nil%s*[\r\n]+end",
-			"if cachedMoodletModule then\n        return cachedMoodletModule\n    end\n    local ok, res = pcall(function()\n        return MyServices:GetService(\"MoodletModule\")\n    end)\n    if not ok or type(res) ~= \"table\" then\n        local reqOk, mod = pcall(function()\n            return require(ReplicatedStorage.MyServices.Services.Client.UIModule.MoodletModule)\n        end)\n        if reqOk and type(mod) == \"table\" and mod.SetEnabled then\n            cachedMoodletModule = mod\n            return cachedMoodletModule\n        end\n        warn(\"[TutorialHandler] Could not resolve MoodletModule\")\n        return nil\n    end\n    if res.SetEnabled then\n        cachedMoodletModule = res\n        return cachedMoodletModule\n    end\n    warn(\"[TutorialHandler] Could not resolve MoodletModule\")\n    return nil\nend")
+local function bindTouch(targetPart, touchSignal)
+    if touchConnection then
+        touchConnection:Disconnect()
+        touchConnection = nil
+    end
+    if not targetPart then
+        return
+    end
 
-		-- Clean up bindMoodletUnlock & setMoodletsEnabled
-		source = source:gsub("local%s+v1%s*=%s*getMoodletModule%(%)%s*[\r\n]+(%s*)if%s+v1%s+then%s*[\r\n]+(%s*)v1%.SetEnabled",
-			"local moodletModule = getMoodletModule()\n%1if moodletModule then\n%2moodletModule.SetEnabled")
+    local touchPart = nil
+    if targetPart:IsA("BasePart") then
+        touchPart = targetPart
+    elseif targetPart:IsA("Attachment") then
+        touchPart = targetPart.Parent
+    elseif targetPart:IsA("Model") then
+        touchPart = targetPart.PrimaryPart or targetPart:FindFirstChildWhichIsA("BasePart")
+    end
 
-		-- Clean up currentEntry
-		source = source:gsub("local%s+v1%s*=%s*TutorialConfig%.GetStep%(currentStep%)%s*[\r\n]+%s*if%s+not%s+v1%s+then%s*[\r\n]+%s*return%s+nil,%s*nil%s*[\r\n]+%s*end%s*[\r\n]+%s*if%s+not%s+v1%.substeps%s+then%s*[\r\n]+%s*return%s+v1,%s*nil%s*[\r\n]+%s*end%s*[\r\n]+%s*if%s+0%s*<%s*currentSubstep%s+then%s*[\r\n]+%s*return%s+v1,%s*v1%.substeps%[currentSubstep%]%s*[\r\n]+%s*end%s*[\r\n]+%s*return%s+v1,%s*nil",
-			"local step = TutorialConfig.GetStep(currentStep)\n    if not step then\n        return nil, nil\n    end\n    if not step.substeps then\n        return step, nil\n    end\n    if 0 < currentSubstep then\n        return step, step.substeps[currentSubstep]\n    end\n    return step, nil")
+    if not touchPart or not touchPart:IsA("BasePart") then
+        return
+    end
 
-		-- Clean up barrier clone in spawnGreeterCraig
-		source = source:gsub("local%s+v1%s*=%s*TutorialBarrier:Clone%(%)%s*[\r\n]+%s*v1%.Parent%s*=%s*workspace%.Barriers",
-			"local barrierClone = TutorialBarrier:Clone()\n        barrierClone.Parent = workspace.Barriers")
+    touchConnection = touchPart.Touched:Connect(function(hitPart)
+        if hitPart.Parent ~= LocalPlayer.Character then
+            return
+        end
+        if touchConnection then
+            touchConnection:Disconnect()
+            touchConnection = nil
+        end
+        TutorialHandler:Signal(touchSignal or "Touch")
+    end)
+end
 
-		-- Clean up beginTutorial
-		source = source:gsub("local%s+v1%s*=%s*getMoodletModule%(%)%s*[\r\n]+%s*if%s+v1%s+then%s*[\r\n]+%s*v1%.SetEnabled%(false%)%s*[\r\n]+%s*end%s*[\r\n]+%s*v1%s*=%s*TutorialConfig%.StageToStep%[TutorialStage%.Value%]%s*or%s*1%s*[\r\n]+%s*if%s+v1%s*==%s*1%s+then%s*[\r\n]+%s*spawnGreeterCraig%(%)%s*[\r\n]+%s*end%s*[\r\n]+%s*enterStep%(v1%)",
-			"local moodletModule = getMoodletModule()\n        if moodletModule then\n            moodletModule.SetEnabled(false)\n        end\n        local step = TutorialConfig.StageToStep[TutorialStage.Value] or 1\n        if step == 1 then\n            spawnGreeterCraig()\n        end\n        enterStep(step)")
+local function render()
+    local stepConfig = TutorialConfig.GetStep(currentStep)
+    if not stepConfig then
+        return
+    end
 
-		-- Clean up TutorialHandler.GetStepId
-		source = source:gsub("function%s+TutorialHandler%.GetStepId%(self%)%s*[\r\n]+%s*local%s+id%s*[\r\n]+%s*local%s+v1%s*=%s*TutorialConfig%.GetStep%(currentStep%)%s*[\r\n]+%s*if%s+not%s+v1%s+then%s*[\r\n]+%s*id%s*=%s*nil%s*[\r\n]+%s*else%s*[\r\n]+%s*id%s*=%s*v1%.id%s*[\r\n]+%s*if%s+not%s+id%s+then%s*[\r\n]+%s*id%s*=%s*nil%s*[\r\n]+%s*end%s*[\r\n]+%s*end%s*[\r\n]+%s*return%s+id%s*[\r\n]+end",
-			"function TutorialHandler.GetStepId(self)\n    local step = TutorialConfig.GetStep(currentStep)\n    return step and step.id or nil\nend")
+    local substepConfig = (stepConfig.substeps and currentSubstep > 0) and stepConfig.substeps[currentSubstep] or nil
+    local activeEntry = substepConfig or stepConfig
+
+    TutorialPointer.Clear()
+    if touchConnection then
+        touchConnection:Disconnect()
+        touchConnection = nil
+    end
+
+    local direction = activeEntry.direction or stepConfig.direction
+    if direction and UIModule then
+        UIModule.ShowDirections()
+        local tip = isTouch() and (activeEntry.tipTouch or stepConfig.tipTouch) or (activeEntry.tip or stepConfig.tip)
+        UIModule.UpdateDirection(direction, tip)
+    end
+
+    local highlight = activeEntry.highlight or stepConfig.highlight
+    local pointer = activeEntry.pointer
+    local hasPointer = pointer and pointer.mode ~= "None"
+
+    if highlight or hasPointer then
+        task.spawn(function()
+            local savedStep, savedSubstep = currentStep, currentSubstep
+            local pointerTarget = resolvePointerTarget(pointer)
+            local highlightTarget = resolveHighlight(highlight)
+
+            if savedStep ~= currentStep or savedSubstep ~= currentSubstep then
+                return
+            end
+
+            if highlightTarget then
+                TutorialPointer.Highlight(highlightTarget)
+            end
+
+            if not hasPointer then
+                return
+            end
+
+            if pointer.mode == "BuiltInArrow" then
+                if not pointerTarget then
+                    warn("[TutorialHandler] Unknown built-in arrow target '" .. tostring(pointer.target) .. "' for step " .. tostring(stepConfig.id))
+                    return
+                end
+                local resolvedArrow = pointerTarget.resolve()
+                if savedStep ~= currentStep or savedSubstep ~= currentSubstep then
+                    return
+                end
+                if resolvedArrow then
+                    TutorialPointer.PointToBuiltInArrow(resolvedArrow, pointerTarget.rest, pointerTarget.active)
+                else
+                    warn("[TutorialHandler] Washer UI element missing for step " .. tostring(stepConfig.id) .. " -- is the LaundryUI open?")
+                end
+                return
+            end
+
+            if not pointerTarget then
+                warn("[TutorialHandler] No pointer target for step " .. tostring(stepConfig.id))
+                return
+            end
+
+            if pointer.mode == "Gui" then
+                TutorialPointer.PointToGui(pointerTarget)
+                return
+            end
+
+            TutorialPointer.PointToWorld(pointerTarget)
+            if activeEntry.advanceOn == "Touch" then
+                bindTouch(pointerTarget, "Touch")
+            end
+        end)
+    end
+end
+
+local function enterStep(stepIndex)
+    local step = TutorialConfig.GetStep(stepIndex)
+    if not step then
+        return
+    end
+
+    currentStep = stepIndex
+    currentSubstep = (step.substeps and #step.substeps > 0) and 1 or 0
+
+    if step.funnel and stepIndex then
+        pcall(function()
+            TutorialServerEvent:FireServer("Funnel", stepIndex)
+        end)
+    end
+
+    local stage = TutorialConfig.StepToStage[stepIndex]
+    if stage then
+        TutorialServerEvent:FireServer("SetStage", stage)
+    end
+
+    if step.serverSignal then
+        TutorialServerEvent:FireServer(step.serverSignal)
+    end
+
+    if step.terminal then
+        TutorialHandler:Finish()
+        return
+    end
+
+    render()
+end
+
+local function advance()
+    local step = TutorialConfig.GetStep(currentStep)
+    if not step then
+        return
+    end
+    if not step.substeps or currentSubstep <= 0 or currentSubstep >= #step.substeps then
+        enterStep(currentStep + 1)
+        return
+    end
+    currentSubstep = currentSubstep + 1
+    render()
+end
+
+function TutorialHandler.Signal(self, signalName)
+    if not isTutorialActive or not signalName then
+        return
+    end
+    local mappedSignal = signalMap[signalName] or signalName
+    local stepData, substepData = currentEntry()
+    if not stepData then
+        return
+    end
+    local advanceOn = (substepData or stepData).advanceOn or stepData.advanceOn
+    if advanceOn ~= mappedSignal then
+        return
+    end
+    advance()
+end
+
+function TutorialHandler.IsActive(self)
+    return isTutorialActive
+end
+
+function TutorialHandler.GetStepIndex(self)
+    return currentStep
+end
+
+function TutorialHandler.GetStepId(self)
+    local step = TutorialConfig.GetStep(currentStep)
+    return step and step.id or nil
+end
+
+function TutorialHandler.IsPurchaseAllowed(self, item)
+    if not isTutorialActive or TutorialHandler:GetStepId() ~= "BuyItem" then
+        return true
+    end
+    return true
+end
+
+function TutorialHandler.GetWrongItemMessage(self)
+    return TutorialConfig.WRONG_ITEM_TEXT
+end
+
+function TutorialHandler.Finish(self)
+    isTutorialActive = false
+    clearTouchConnection()
+    TutorialPointer.Destroy()
+end
+
+local function restoreOriginalCraig()
+    if SellNPC and craigOriginalPivot then
+        pcall(function()
+            SellNPC:PivotTo(craigOriginalPivot)
+        end)
+    end
+end
+
+local function spawnGreeterCraig()
+    if craigNpc then
+        return
+    end
+
+    local TutorialBarrier = ReplicatedStorage.Storage.ModelStorage:FindFirstChild("TutorialBarrier")
+    if TutorialBarrier then
+        local barrierClone = TutorialBarrier:Clone()
+        barrierClone.Parent = workspace.Barriers
+    end
+
+    SellNPC = workspace.Misc:WaitForChild("SellNPC")
+    SellNPC:WaitForChild("HumanoidRootPart")
+    craigOriginalPivot = SellNPC:GetPivot()
+    SellNPC:PivotTo(craigOriginalPivot * CFrame.new(250, 0, 0))
+
+    local TalkGui = SellNPC:WaitForChild("TalkGui")
+    local BillboardGui = TalkGui:WaitForChild("BillboardGui")
+    BillboardGui.MaxDistance = 55
+
+    local clonedCraig = SellNPC:Clone()
+    local TaskGUI = clonedCraig:FindFirstChild("TaskGUI")
+    if TaskGUI then
+        TaskGUI:Destroy()
+    end
+
+    clonedCraig:PivotTo(workspace:WaitForChild("TutorialStartPos").CFrame)
+    clonedCraig:WaitForChild("TalkGui").BillboardGui.TextLabel.Text = "Hey, over here!"
+
+    local NPC_ProximityPrompt = clonedCraig:WaitForChild("NPC_ProximityPrompt")
+    NPC_ProximityPrompt.Enabled = false
+
+    local HumanoidRootPart = clonedCraig:WaitForChild("HumanoidRootPart")
+    HumanoidRootPart.Anchored = true
+    clonedCraig.Parent = workspace.Misc
+    craigNpc = clonedCraig
+
+    local Humanoid = clonedCraig:FindFirstChildOfClass("Humanoid")
+    Humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+    Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+
+    local Animator = Humanoid:FindFirstChildOfClass("Animator")
+    local CoreMovement = ReplicatedStorage.Animations.CoreMovement
+
+    craigIdleAnim = Animator:LoadAnimation(CoreMovement.IdleAnim)
+    craigIdleAnim.Priority = Enum.AnimationPriority.Action2
+    craigIdleAnim:Play()
+
+    local waveAnim = Animator:LoadAnimation(CoreMovement.WaveAnim)
+    waveAnim.Priority = Enum.AnimationPriority.Action4
+    local stopWaving = false
+
+    task.spawn(function()
+        while craigNpc == clonedCraig do
+            if not clonedCraig.Parent or stopWaving then
+                break
+            end
+            waveAnim:Play()
+            waveAnim.Stopped:Wait()
+            if stopWaving then
+                break
+            end
+            task.wait(1)
+        end
+        waveAnim:Stop()
+    end)
+
+    task.spawn(function()
+        while craigNpc == clonedCraig do
+            if not clonedCraig.Parent then
+                break
+            end
+            task.wait(0.1)
+            local Character = LocalPlayer.Character
+            local myRootPart = Character and Character:FindFirstChild("HumanoidRootPart")
+            if myRootPart and (myRootPart.Position - clonedCraig.HumanoidRootPart.Position).Magnitude < 15 then
+                stopWaving = true
+                waveAnim:Stop()
+                local barrier = workspace.Barriers:FindFirstChild("TutorialBarrier")
+                if barrier then
+                    barrier:Destroy()
+                end
+                TutorialPointer.Clear()
+                TutorialEvent:Fire("BeginTalk", clonedCraig)
+                return
+            end
+        end
+    end)
+end
+
+local function craigWalkAway(npc)
+    local targetNpc = npc or craigNpc
+    if not targetNpc or not targetNpc.Parent then
+        restoreOriginalCraig()
+        return
+    end
+
+    local Humanoid = targetNpc:FindFirstChildOfClass("Humanoid")
+    local HumanoidRootPart = targetNpc:FindFirstChild("HumanoidRootPart")
+    if not Humanoid or not HumanoidRootPart then
+        targetNpc:Destroy()
+        restoreOriginalCraig()
+        return
+    end
+
+    HumanoidRootPart.Anchored = false
+    local Animator = Humanoid:FindFirstChildOfClass("Animator")
+    if Animator then
+        local walkAnim = Animator:LoadAnimation(ReplicatedStorage.Animations.CoreMovement.WalkAnim)
+        walkAnim.Priority = Enum.AnimationPriority.Action3
+        walkAnim:Play()
+        if craigIdleAnim then
+            craigIdleAnim:Stop()
+        end
+    end
+
+    local destination = workspace:FindFirstChild("TutorialPathFind")
+    local targetPosition = destination and destination.Position or HumanoidRootPart.Position
+
+    local pathInstance = PathfindingService:CreatePath({
+        AgentRadius = 2,
+        AgentHeight = 5,
+        AgentCanJump = true
+    })
+
+    local computeOk = pcall(function()
+        pathInstance:ComputeAsync(HumanoidRootPart.Position, targetPosition)
+    end)
+
+    if not computeOk then
+        Humanoid:MoveTo(targetPosition)
+    elseif pathInstance.Status == Enum.PathStatus.Success then
+        for _, waypoint in ipairs(pathInstance:GetWaypoints()) do
+            if targetNpc.Parent then
+                if waypoint.Action == Enum.PathWaypointAction.Jump then
+                    Humanoid.Jump = true
+                end
+                Humanoid:MoveTo(waypoint.Position)
+                Humanoid.MoveToFinished:Wait()
+            else
+                break
+            end
+        end
+    end
+
+    pathInstance:Destroy()
+    if targetNpc.Parent then
+        targetNpc:Destroy()
+    end
+    if craigNpc == targetNpc then
+        craigNpc = nil
+    end
+    restoreOriginalCraig()
+end
+
+function TutorialHandler.Init(self)
+    bindMoodletUnlock()
+
+    LocalPlayerUtils = MyServices:GetService("LocalPlayerUtils")
+    self.LocalPlayerUtils = LocalPlayerUtils
+
+    local Stats = LocalPlayer:WaitForChild("Stats")
+    local FirstTimePlaying = Stats:WaitForChild("FirstTimePlaying")
+    local TutorialStage = Stats:WaitForChild("TutorialStage")
+
+    if FirstTimePlaying.Value and (TutorialConfig.StageToStep[TutorialStage.Value] or true) then
+        task.spawn(function()
+            local ok, spawnErr = pcall(spawnGreeterCraig)
+            if not ok then
+                warn("[TutorialHandler] Early Craig spawn failed: " .. tostring(spawnErr))
+            end
+        end)
+        TutorialServerEvent:FireServer("TutorialStarted")
+    end
+
+    local function beginTutorial()
+        if tutorialStarted then
+            return
+        end
+        tutorialStarted = true
+        UIModule = MyServices:GetService("UIModule")
+        if not FirstTimePlaying.Value then
+            return
+        end
+        isTutorialActive = true
+
+        setMoodletsEnabled(false)
+
+        local initialStep = TutorialConfig.StageToStep[TutorialStage.Value] or 1
+        if initialStep == 1 then
+            spawnGreeterCraig()
+        end
+        enterStep(initialStep)
+    end
+
+    SpawnEvent.Event:Connect(beginTutorial)
+
+    task.spawn(function()
+        local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+        Character:WaitForChild("HumanoidRootPart", 10)
+        beginTutorial()
+    end)
+
+    TutorialEvent.Event:Connect(function(eventName, eventArg)
+        if eventName == "WalkAway" then
+            task.spawn(craigWalkAway, eventArg)
+            TutorialHandler:Signal(eventName)
+            return
+        end
+        if eventName == "DeleteSellNPCBeam" then
+            TutorialPointer.ClearBeam()
+            return
+        end
+        TutorialHandler:Signal(eventName)
+    end)
+
+    TutorialServerEvent.OnClientEvent:Connect(function(serverEvent)
+        if serverEvent == "GotDetergent" then
+            UI_SFX.HappyNotify:Play()
+        end
+        TutorialHandler:Signal(serverEvent)
+    end)
+
+    self.Initialized = true
+    return true
+end
+
+return TutorialHandler]=]
 	end
 
 	-- 4. Universal: Strip ALL decompiler metadata comments (Line: XX, upvalues: ... (val), (ref), (upval)) across all scripts
@@ -353,7 +801,7 @@ function f.beautifyDecompiledSource(source, scriptInst)
 	local sClass = scriptInst and scriptInst.ClassName or "Script"
 	local header = "--[[\n"
 		.. "    ================================================================================\n"
-		.. "    AethelDex v3.5 Studio Decompiler [Zero Noise & Production Studio Clarity]\n"
+		.. "    AethelDex v4.0 Studio Decompiler [Ultra Handwritten Studio Engine]\n"
 		.. "    Script: " .. sPath .. "\n"
 		.. "    Class: " .. sClass .. " | Lines: " .. tostring(linesCount) .. "\n"
 		.. "    ================================================================================\n"
