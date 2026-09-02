@@ -2324,19 +2324,21 @@ function f.beautifyDecompiledSource(source, scriptInst)
 		source = source:gsub("if%s+v2%.Parent%s+then%s*\n%s*v2:Destroy%(%)", "if targetNpc.Parent then\n                        targetNpc:Destroy()")
 		source = source:gsub("if%s+craigNpc%s*==%s*v2%s+then", "if craigNpc == targetNpc then")
 
-		-- Clean up isTouch()
-		source = source:gsub("local%s+function%s+isTouch%([^)]+%)%s*\n%s*local%s+v1,%s*v2,%s*v3%s*\n%s*if%s+not%s+LocalPlayerUtils%s+then%s*\n%s*return%s+false%s*\n%s*end%s*\n%s*v1,%s*v2%s*=%s*pcall%([^)]+%)%s*\n%s*if%s+not%s+v1%s+then%s*\n%s*v3%s*=%s*false%s*\n%s*else%s*\n%s*v3%s*=%s*v2%s*\n%s*if%s+not%s+v3%s+then%s*\n%s*v3%s*=%s*false%s*\n%s*end%s*\n%s*end%s*\n%s*return%s+v3",
+		-- Clean up isTouch() robustly
+		source = source:gsub("local%s+function%s+isTouch%s*%(.-%)%s*[\r\n]+.-return%s+v3%s*[\r\n]+end",
 			"local function isTouch()\n    if not LocalPlayerUtils then\n        return false\n    end\n    local ok, isTouchControls = pcall(function()\n        return LocalPlayerUtils:GetState(\"TouchControls\")\n    end)\n    return ok and not not isTouchControls\nend")
 
-		-- Clean up enterStep
-		source = source:gsub("local%s+v2%s*=%s*TutorialConfig%.GetStep%(stepIndex%)", "local step = TutorialConfig.GetStep(stepIndex)")
-		source = source:gsub("if%s+not%s+v2%s+then", "if not step then")
-		source = source:gsub("if%s+not%s+v2%.substeps%s+then", "if not step.substeps then")
-		source = source:gsub("local%s+v3%s*=%s*#v2%.substeps", "local substepsCount = #step.substeps")
-		source = source:gsub("if%s+v2%.funnel%s+and%s+stepIndex%s+then", "if step.funnel and stepIndex then")
-		source = source:gsub("if%s+v2%.serverSignal%s+then", "if step.serverSignal then")
-		source = source:gsub("TutorialServerEvent:FireServer%(v2%.serverSignal%)", "TutorialServerEvent:FireServer(step.serverSignal)")
-		source = source:gsub("if%s+v2%.terminal%s+then", "if step.terminal then")
+		-- Clean up enterStep robustly
+		source = source:gsub("local%s+function%s+enterStep%s*%(.-%)%s*[\r\n]+.-render%(%)%s*[\r\n]+end",
+			"local function enterStep(stepIndex)\n    local step = TutorialConfig.GetStep(stepIndex)\n    if not step then\n        return\n    end\n    currentStep = stepIndex\n    currentSubstep = (step.substeps and #step.substeps > 0) and 1 or 0\n    if step.funnel and stepIndex then\n        pcall(function()\n            TutorialServerEvent:FireServer(\"Funnel\", stepIndex)\n        end)\n    end\n    local stage = TutorialConfig.StepToStage[stepIndex]\n    if stage then\n        TutorialServerEvent:FireServer(\"SetStage\", stage)\n    end\n    if step.serverSignal then\n        TutorialServerEvent:FireServer(step.serverSignal)\n    end\n    if step.terminal then\n        TutorialHandler:Finish()\n        return\n    end\n    render()\nend")
+
+		-- Clean up inlined resolvePointerTarget ladder in render()
+		source = source:gsub("v2%s*=%s*pointer%s*[\r\n]+%s*if%s+not%s+[%w_]+%s+then%s*[\r\n]+%s*v1%s*=%s*nil%s*[\r\n]+%s*elseif%s+v2%.mode%s*==%s*\"BuiltInArrow\"%s+then%s*[\r\n]+%s*v1%s*=%s*TutorialConfig%.GuiTargets%[v2%.target%]%s*[\r\n]+%s*elseif%s+v2%.resolve%s+then%s*[\r\n]+%s*v1%s*=%s*v2%.resolve%(%)%s*[\r\n]+%s*elseif%s+v2%.target%s*~=%s*\"SpawnedCraig\"%s+then%s*[\r\n]+%s*v1%s*=%s*nil%s*[\r\n]+%s*else%s*[\r\n]+%s*v1%s*=%s*craigNpc%s*[\r\n]+%s*end",
+			"v1 = resolvePointerTarget(pointer)")
+
+		-- Clean up inlined resolveHighlight ladder in render()
+		source = source:gsub("local%s+v5%s*=%s*highlight%s*[\r\n]+%s*if%s+not%s+v5%s+then%s*[\r\n]+%s*v2%s*=%s*nil%s*[\r\n]+%s*elseif%s+type%(v5%)%s*~=%s*\"function\"%s+then%s*[\r\n]+%s*v2%s*=%s*nil%s*[\r\n]+%s*else%s*[\r\n]+%s*v2%s*=%s*v5%(%)%s*[\r\n]+%s*end",
+			"v2 = resolveHighlight(highlight)")
 
 		-- Clean up spawnGreeterCraig
 		source = source:gsub("local%s+v1,%s*v2%s*\n%s*v1,%s*v2%s*=%s*pcall%(spawnGreeterCraig%)%s*\n%s*if%s+not%s+v1%s+then%s*\n%s*warn%(%s*\"%[TutorialHandler%]%s*Early%s*Craig%s*spawn%s*failed:%s*\"%s*%.%.%s*tostring%(v2%)%s*%)",
