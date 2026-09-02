@@ -127,6 +127,9 @@ function createDexGui()
 	local DexGui59 = CreateInstance("ImageLabel",{Image="rbxassetid://527318112",ImageColor3=Color3.new(0.86274516582489,0.86274516582489,0.86274516582489),ImageRectOffset=Vector2.new(0,0),ImageRectSize=Vector2.new(0,0),ImageTransparency=0,ScaleType=0,SliceCenter=Rect.new(0,0,0,0),Active=false,AnchorPoint=Vector2.new(0,0),BackgroundColor3=Color3.new(1,1,1),BackgroundTransparency=1,BorderColor3=Color3.new(0.10588236153126,0.16470588743687,0.20784315466881),BorderSizePixel=1,ClipsDescendants=false,Draggable=false,Position=UDim2.new(1,4,0,-15),Rotation=0,Selectable=false,Size=UDim2.new(0,16,0,16),SizeConstraint=0,Visible=false,ZIndex=1,Name="ImageLabel",Parent = DexGui56})
 	local DexGui60 = CreateInstance("Frame",{Style=0,Active=false,AnchorPoint=Vector2.new(0,0),BackgroundColor3=Color3.new(0.13333334028721,0.65490198135376,0.94117653369904),BackgroundTransparency=0,BorderColor3=Color3.new(0.10588236153126,0.16470588743687,0.20784315466881),BorderSizePixel=0,ClipsDescendants=false,Draggable=false,Position=UDim2.new(0.5,0,0,0),Rotation=0,Selectable=false,Size=UDim2.new(0,0,0,2),SizeConstraint=0,Visible=true,ZIndex=1,Name="Entering",Parent = DexGui56})
 	local DexGui61 = CreateInstance("TextLabel",{Font=3,FontSize=5,Text="Explorer",TextColor3=Color3.new(0.86274516582489,0.86274516582489,0.86274516582489),TextScaled=false,TextSize=14,TextStrokeColor3=Color3.new(0,0,0),TextStrokeTransparency=1,TextTransparency=0,TextWrapped=false,TextXAlignment=2,TextYAlignment=1,Active=false,AnchorPoint=Vector2.new(0,0),BackgroundColor3=Color3.new(1,1,1),BackgroundTransparency=1,BorderColor3=Color3.new(0.10588236153126,0.16470588743687,0.20784315466881),BorderSizePixel=1,ClipsDescendants=false,Draggable=false,Position=UDim2.new(0,25,0,0),Rotation=0,Selectable=false,Size=UDim2.new(1,-50,0,25),SizeConstraint=0,Visible=true,ZIndex=1,Name="WindowTitle",Parent = DexGui55})
+	local savePlaceTopBtn = CreateInstance("TextButton",{Font=3,FontSize=5,Text="💾 Save Place",TextColor3=Color3.fromRGB(240,240,240),TextScaled=false,TextSize=11,TextStrokeColor3=Color3.new(0,0,0),TextStrokeTransparency=1,TextTransparency=0,TextWrapped=false,TextXAlignment=2,TextYAlignment=1,AutoButtonColor=true,Modal=false,Selected=false,Style=0,Active=true,AnchorPoint=Vector2.new(0,0),BackgroundColor3=Color3.fromRGB(35,85,155),BackgroundTransparency=0,BorderColor3=Color3.new(0,0,0),BorderSizePixel=0,ClipsDescendants=false,Draggable=false,Position=UDim2.new(1,-115,0,2),Rotation=0,Selectable=true,Size=UDim2.new(0,85,0,21),SizeConstraint=0,Visible=true,ZIndex=5,Name="SavePlaceBtn",Parent = DexGui55})
+	local spc = Instance.new("UICorner") spc.CornerRadius = UDim.new(0, 4) spc.Parent = savePlaceTopBtn
+	savePlaceTopBtn.MouseButton1Click:Connect(function() f.savePlace({mode = "full", decompile = true, native = true}) end)
 	local DexGui62 = CreateInstance("TextButton",{Font=3,FontSize=5,Text="",TextColor3=Color3.new(0.10588236153126,0.16470588743687,0.20784315466881),TextScaled=false,TextSize=14,TextStrokeColor3=Color3.new(0,0,0),TextStrokeTransparency=1,TextTransparency=0,TextWrapped=false,TextXAlignment=2,TextYAlignment=1,AutoButtonColor=true,Modal=false,Selected=false,Style=0,Active=true,AnchorPoint=Vector2.new(0,0),BackgroundColor3=Color3.new(0.21960785984993,0.21960785984993,0.21960785984993),BackgroundTransparency=1,BorderColor3=Color3.new(0.10588236153126,0.16470588743687,0.20784315466881),BorderSizePixel=0,ClipsDescendants=false,Draggable=false,Position=UDim2.new(1,-25,0,25),Rotation=0,Selectable=true,Size=UDim2.new(0,25,0,25),SizeConstraint=0,Visible=true,ZIndex=1,Name="Settings",Parent = DexGui55})
 	local DexGui63 = CreateInstance("ImageLabel",{Image="rbxassetid://530240903",ImageColor3=Color3.new(0.86274516582489,0.86274516582489,0.86274516582489),ImageRectOffset=Vector2.new(0,0),ImageRectSize=Vector2.new(0,0),ImageTransparency=0,ScaleType=0,SliceCenter=Rect.new(0,0,0,0),Active=false,AnchorPoint=Vector2.new(0,0),BackgroundColor3=Color3.new(1,1,1),BackgroundTransparency=1,BorderColor3=Color3.new(0.10588236153126,0.16470588743687,0.20784315466881),BorderSizePixel=1,ClipsDescendants=false,Draggable=false,Position=UDim2.new(0,5,0,5),Rotation=0,Selectable=false,Size=UDim2.new(1,-10,1,-10),SizeConstraint=0,Visible=true,ZIndex=1,Name="ImageLabel",Parent = DexGui62})
 	local DexGui64 = CreateInstance("TextButton",{Font=4,FontSize=5,Text="X",TextColor3=Color3.new(0.86274516582489,0.86274516582489,0.86274516582489),TextScaled=false,TextSize=14,TextStrokeColor3=Color3.new(0,0,0),TextStrokeTransparency=1,TextTransparency=0,TextWrapped=false,TextXAlignment=2,TextYAlignment=1,AutoButtonColor=true,Modal=false,Selected=false,Style=0,Active=true,AnchorPoint=Vector2.new(0,0),BackgroundColor3=Color3.new(1,1,1),BackgroundTransparency=1,BorderColor3=Color3.new(0.10588236153126,0.16470588743687,0.20784315466881),BorderSizePixel=0,ClipsDescendants=false,Draggable=false,Position=UDim2.new(1,-27,0,0),Rotation=0,Selectable=true,Size=UDim2.new(0,25,0,25),SizeConstraint=0,Visible=true,ZIndex=1,Name="Close",Parent = DexGui55})
@@ -3289,6 +3292,22 @@ function f.viewScript(scriptInst)
 		copyBtn.Font = Enum.Font.SourceSans
 		copyBtn.ZIndex = 52
 		copyBtn.Parent = topBar
+
+		local savePlaceBtn = Instance.new("TextButton")
+		savePlaceBtn.Name = "SavePlace"
+		savePlaceBtn.Size = UDim2.new(0, 85, 0, 22)
+		savePlaceBtn.Position = UDim2.new(1, -260, 0, 4)
+		savePlaceBtn.BackgroundColor3 = Color3.fromRGB(35, 85, 155)
+		savePlaceBtn.BorderSizePixel = 0
+		savePlaceBtn.Text = "💾 Save Place"
+		savePlaceBtn.TextColor3 = Color3.fromRGB(240, 240, 240)
+		savePlaceBtn.TextSize = 11
+		savePlaceBtn.Font = Enum.Font.SourceSansBold
+		savePlaceBtn.ZIndex = 52
+		savePlaceBtn.Parent = topBar
+		savePlaceBtn.MouseButton1Click:Connect(function()
+			f.savePlace({mode = "full", decompile = true, native = true})
+		end)
 		copyBtn.MouseButton1Click:Connect(function()
 			if scriptViewerBox then
 				pcall(function()
@@ -3305,7 +3324,7 @@ function f.viewScript(scriptInst)
 		local beautifyBtn = Instance.new("TextButton")
 		beautifyBtn.Name = "Beautify"
 		beautifyBtn.Size = UDim2.new(0, 64, 0, 22)
-		beautifyBtn.Position = UDim2.new(1, -236, 0, 4)
+		beautifyBtn.Position = UDim2.new(1, -330, 0, 4)
 		beautifyBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
 		beautifyBtn.BorderSizePixel = 0
 		beautifyBtn.Text = "Clean: ON"

@@ -70,6 +70,15 @@ function createDexGui()
 
 code = code.replace(/function createDexGui\(\)[\r\n\s]+local DexGui = CreateInstance\("ScreenGui",\{DisplayOrder=0,Enabled=true,ResetOnSpawn=true,Name="Dex",\}\)/, safeHostCode);
 
+// Add Save Place button into Explorer TopBar
+code = code.replace(
+	'local DexGui62 = CreateInstance("TextButton",{Font=3,FontSize=5,Text="",TextColor3=Color3.new(0.10588236153126,0.16470588743687,0.20784315466881),TextScaled=false,TextSize=14,TextStrokeColor3=Color3.new(0,0,0),TextStrokeTransparency=1,TextTransparency=0,TextWrapped=false,TextXAlignment=2,TextYAlignment=1,AutoButtonColor=true,Modal=false,Selected=false,Style=0,Active=true,AnchorPoint=Vector2.new(0,0),BackgroundColor3=Color3.new(0.21960785984993,0.21960785984993,0.21960785984993),BackgroundTransparency=1,BorderColor3=Color3.new(0.10588236153126,0.16470588743687,0.20784315466881),BorderSizePixel=0,ClipsDescendants=false,Draggable=false,Position=UDim2.new(1,-25,0,25),Rotation=0,Selectable=true,Size=UDim2.new(0,25,0,25),SizeConstraint=0,Visible=true,ZIndex=1,Name="Settings",Parent = DexGui55})',
+	`local savePlaceTopBtn = CreateInstance("TextButton",{Font=3,FontSize=5,Text="💾 Save Place",TextColor3=Color3.fromRGB(240,240,240),TextScaled=false,TextSize=11,TextStrokeColor3=Color3.new(0,0,0),TextStrokeTransparency=1,TextTransparency=0,TextWrapped=false,TextXAlignment=2,TextYAlignment=1,AutoButtonColor=true,Modal=false,Selected=false,Style=0,Active=true,AnchorPoint=Vector2.new(0,0),BackgroundColor3=Color3.fromRGB(35,85,155),BackgroundTransparency=0,BorderColor3=Color3.new(0,0,0),BorderSizePixel=0,ClipsDescendants=false,Draggable=false,Position=UDim2.new(1,-115,0,2),Rotation=0,Selectable=true,Size=UDim2.new(0,85,0,21),SizeConstraint=0,Visible=true,ZIndex=5,Name="SavePlaceBtn",Parent = DexGui55})
+	local spc = Instance.new("UICorner") spc.CornerRadius = UDim.new(0, 4) spc.Parent = savePlaceTopBtn
+	savePlaceTopBtn.MouseButton1Click:Connect(function() f.savePlace({mode = "full", decompile = true, native = true}) end)
+	local DexGui62 = CreateInstance("TextButton",{Font=3,FontSize=5,Text="",TextColor3=Color3.new(0.10588236153126,0.16470588743687,0.20784315466881),TextScaled=false,TextSize=14,TextStrokeColor3=Color3.new(0,0,0),TextStrokeTransparency=1,TextTransparency=0,TextWrapped=false,TextXAlignment=2,TextYAlignment=1,AutoButtonColor=true,Modal=false,Selected=false,Style=0,Active=true,AnchorPoint=Vector2.new(0,0),BackgroundColor3=Color3.new(0.21960785984993,0.21960785984993,0.21960785984993),BackgroundTransparency=1,BorderColor3=Color3.new(0.10588236153126,0.16470588743687,0.20784315466881),BorderSizePixel=0,ClipsDescendants=false,Draggable=false,Position=UDim2.new(1,-25,0,25),Rotation=0,Selectable=true,Size=UDim2.new(0,25,0,25),SizeConstraint=0,Visible=true,ZIndex=1,Name="Settings",Parent = DexGui55})`
+);
+
 // 7. Fix folder expanding: ensure children are populated on expand + check children in NodeDraw
 const ensureChildrenFunc = `
 function f.ensureChildren(node)

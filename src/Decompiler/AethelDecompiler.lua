@@ -1222,6 +1222,22 @@ function f.viewScript(scriptInst)
 		copyBtn.Font = Enum.Font.SourceSans
 		copyBtn.ZIndex = 52
 		copyBtn.Parent = topBar
+
+		local savePlaceBtn = Instance.new("TextButton")
+		savePlaceBtn.Name = "SavePlace"
+		savePlaceBtn.Size = UDim2.new(0, 85, 0, 22)
+		savePlaceBtn.Position = UDim2.new(1, -260, 0, 4)
+		savePlaceBtn.BackgroundColor3 = Color3.fromRGB(35, 85, 155)
+		savePlaceBtn.BorderSizePixel = 0
+		savePlaceBtn.Text = "💾 Save Place"
+		savePlaceBtn.TextColor3 = Color3.fromRGB(240, 240, 240)
+		savePlaceBtn.TextSize = 11
+		savePlaceBtn.Font = Enum.Font.SourceSansBold
+		savePlaceBtn.ZIndex = 52
+		savePlaceBtn.Parent = topBar
+		savePlaceBtn.MouseButton1Click:Connect(function()
+			f.savePlace({mode = "full", decompile = true, native = true})
+		end)
 		copyBtn.MouseButton1Click:Connect(function()
 			if scriptViewerBox then
 				pcall(function()
@@ -1238,7 +1254,7 @@ function f.viewScript(scriptInst)
 		local beautifyBtn = Instance.new("TextButton")
 		beautifyBtn.Name = "Beautify"
 		beautifyBtn.Size = UDim2.new(0, 64, 0, 22)
-		beautifyBtn.Position = UDim2.new(1, -236, 0, 4)
+		beautifyBtn.Position = UDim2.new(1, -330, 0, 4)
 		beautifyBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
 		beautifyBtn.BorderSizePixel = 0
 		beautifyBtn.Text = "Clean: ON"
