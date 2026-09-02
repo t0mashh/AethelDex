@@ -2344,11 +2344,38 @@ function f.beautifyDecompiledSource(source, scriptInst)
 		source = source:gsub("local%s+v1,%s*v2%s*\n%s*v1,%s*v2%s*=%s*pcall%(spawnGreeterCraig%)%s*\n%s*if%s+not%s+v1%s+then%s*\n%s*warn%(%s*\"%[TutorialHandler%]%s*Early%s*Craig%s*spawn%s*failed:%s*\"%s*%.%.%s*tostring%(v2%)%s*%)",
 			"local ok, spawnErr = pcall(spawnGreeterCraig)\n            if not ok then\n                warn(\"[TutorialHandler] Early Craig spawn failed: \" .. tostring(spawnErr))")
 
-		-- Clean up remaining comment parameters in TutorialHandler
-		source = source:gsub("TutorialServerEvent%s*%(upval%),%s*touchSignal%s*%(val%)", "TutorialServerEvent (upval), funnelName (val)")
-		source = source:gsub("TutorialServerEvent%s*%(upval%),%s*p2%s*%(val%)", "TutorialServerEvent (upval), funnelName (val)")
-		source = source:gsub("TutorialHandler%s*%(upval%),%s*p2%s*%(val%)", "TutorialHandler (upval), touchSignal (val)")
+		-- Clean up getMoodletModule
+		source = source:gsub("local%s+v1,%s*v2,%s*v3,%s*v4%s*[\r\n]+%s*if%s+cachedMoodletModule%s+then.-warn%(%\"%[TutorialHandler%]%s*Could not resolve MoodletModule%\"%)%s*[\r\n]+%s*return%s+nil%s*[\r\n]+end",
+			"if cachedMoodletModule then\n        return cachedMoodletModule\n    end\n    local ok, res = pcall(function()\n        return MyServices:GetService(\"MoodletModule\")\n    end)\n    if not ok or type(res) ~= \"table\" then\n        local reqOk, mod = pcall(function()\n            return require(ReplicatedStorage.MyServices.Services.Client.UIModule.MoodletModule)\n        end)\n        if reqOk and type(mod) == \"table\" and mod.SetEnabled then\n            cachedMoodletModule = mod\n            return cachedMoodletModule\n        end\n        warn(\"[TutorialHandler] Could not resolve MoodletModule\")\n        return nil\n    end\n    if res.SetEnabled then\n        cachedMoodletModule = res\n        return cachedMoodletModule\n    end\n    warn(\"[TutorialHandler] Could not resolve MoodletModule\")\n    return nil\nend")
+
+		-- Clean up bindMoodletUnlock & setMoodletsEnabled
+		source = source:gsub("local%s+v1%s*=%s*getMoodletModule%(%)%s*[\r\n]+(%s*)if%s+v1%s+then%s*[\r\n]+(%s*)v1%.SetEnabled",
+			"local moodletModule = getMoodletModule()\n%1if moodletModule then\n%2moodletModule.SetEnabled")
+
+		-- Clean up currentEntry
+		source = source:gsub("local%s+v1%s*=%s*TutorialConfig%.GetStep%(currentStep%)%s*[\r\n]+%s*if%s+not%s+v1%s+then%s*[\r\n]+%s*return%s+nil,%s*nil%s*[\r\n]+%s*end%s*[\r\n]+%s*if%s+not%s+v1%.substeps%s+then%s*[\r\n]+%s*return%s+v1,%s*nil%s*[\r\n]+%s*end%s*[\r\n]+%s*if%s+0%s*<%s*currentSubstep%s+then%s*[\r\n]+%s*return%s+v1,%s*v1%.substeps%[currentSubstep%]%s*[\r\n]+%s*end%s*[\r\n]+%s*return%s+v1,%s*nil",
+			"local step = TutorialConfig.GetStep(currentStep)\n    if not step then\n        return nil, nil\n    end\n    if not step.substeps then\n        return step, nil\n    end\n    if 0 < currentSubstep then\n        return step, step.substeps[currentSubstep]\n    end\n    return step, nil")
+
+		-- Clean up barrier clone in spawnGreeterCraig
+		source = source:gsub("local%s+v1%s*=%s*TutorialBarrier:Clone%(%)%s*[\r\n]+%s*v1%.Parent%s*=%s*workspace%.Barriers",
+			"local barrierClone = TutorialBarrier:Clone()\n        barrierClone.Parent = workspace.Barriers")
+
+		-- Clean up beginTutorial
+		source = source:gsub("local%s+v1%s*=%s*getMoodletModule%(%)%s*[\r\n]+%s*if%s+v1%s+then%s*[\r\n]+%s*v1%.SetEnabled%(false%)%s*[\r\n]+%s*end%s*[\r\n]+%s*v1%s*=%s*TutorialConfig%.StageToStep%[TutorialStage%.Value%]%s*or%s*1%s*[\r\n]+%s*if%s+v1%s*==%s*1%s+then%s*[\r\n]+%s*spawnGreeterCraig%(%)%s*[\r\n]+%s*end%s*[\r\n]+%s*enterStep%(v1%)",
+			"local moodletModule = getMoodletModule()\n        if moodletModule then\n            moodletModule.SetEnabled(false)\n        end\n        local step = TutorialConfig.StageToStep[TutorialStage.Value] or 1\n        if step == 1 then\n            spawnGreeterCraig()\n        end\n        enterStep(step)")
+
+		-- Clean up TutorialHandler.GetStepId
+		source = source:gsub("function%s+TutorialHandler%.GetStepId%(self%)%s*[\r\n]+%s*local%s+id%s*[\r\n]+%s*local%s+v1%s*=%s*TutorialConfig%.GetStep%(currentStep%)%s*[\r\n]+%s*if%s+not%s+v1%s+then%s*[\r\n]+%s*id%s*=%s*nil%s*[\r\n]+%s*else%s*[\r\n]+%s*id%s*=%s*v1%.id%s*[\r\n]+%s*if%s+not%s+id%s+then%s*[\r\n]+%s*id%s*=%s*nil%s*[\r\n]+%s*end%s*[\r\n]+%s*end%s*[\r\n]+%s*return%s+id%s*[\r\n]+end",
+			"function TutorialHandler.GetStepId(self)\n    local step = TutorialConfig.GetStep(currentStep)\n    return step and step.id or nil\nend")
 	end
+
+	-- 4. Universal: Strip ALL decompiler metadata comments (Line: XX, upvalues: ... (val), (ref), (upval)) across all scripts
+	source = source:gsub("%s*%-%-%s*Line:%s*%d+%s*%-%-%s*upvalues:[^\r\n]*", "")
+	source = source:gsub("%s*%-%-%s*Line:%s*%d+", "")
+	source = source:gsub("%s*%-%-%s*upvalues:[^\r\n]*", "")
+
+	-- 5. Universal: Strip dummy register declarations at top of functions: local v1, v2, v3, v4
+	source = source:gsub("local%s+v1(?:,%s*v[0-9]+)+%s*[\r\n]+", "")
 
 	-- 4. Dynamic Service / Child Upvalue Resolution across all scripts
 	for uVar, sName in source:gmatch("([uv]%d+)%s*=%s*[%w_]+:GetService%(\"([%w_]+)\"%)") do
@@ -2393,7 +2420,7 @@ function f.beautifyDecompiledSource(source, scriptInst)
 	local sClass = scriptInst and scriptInst.ClassName or "Script"
 	local header = "--[[\n"
 		.. "    ================================================================================\n"
-		.. "    AethelDex v3.0 Studio Decompiler [Semantic Upvalue & Clean Parameter Engine]\n"
+		.. "    AethelDex v3.5 Studio Decompiler [Zero Noise & Production Studio Clarity]\n"
 		.. "    Script: " .. sPath .. "\n"
 		.. "    Class: " .. sClass .. " | Lines: " .. tostring(linesCount) .. "\n"
 		.. "    ================================================================================\n"
